@@ -1,0 +1,3 @@
+[
+  { "fn": "formatResult", "input": { "ok": true, "durationMs": 1432 }, "op": "includes", "expected": "1432" }
+]
