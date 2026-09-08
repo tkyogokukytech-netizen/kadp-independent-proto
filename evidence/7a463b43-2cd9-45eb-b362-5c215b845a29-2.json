@@ -1,0 +1,68 @@
+{
+  "id": "7a463b43-2cd9-45eb-b362-5c215b845a29-2",
+  "baseline": "a1b1fc5b7ddc1ad60d6ba33d7f37328b93145f98",
+  "task": "実行結果に処理時間を表示して",
+  "at": "2026-09-08T19:14:40.189Z",
+  "worker": {
+    "worker": "official-antigravity-cli",
+    "promptHash": "716f3c0d0e8addd3a36c6884b852a33259157e8a5afcdfddd48763f0dac0a0be",
+    "responseHash": "8c87d2946a631741b9c33d99b437e44fec950b445ae08e37cd6da07ecb49c545",
+    "stats": {}
+  },
+  "candidate": {
+    "summary": "実行結果のフォーマット処理で処理時間(durationMs/elapsedMs)を表示するように改善し、検証用の新規テストケースを追加しました。",
+    "files": [
+      {
+        "path": "app/result.js",
+        "content": "// Pure presentation logic. No host capabilities are available here.\nfunction formatResult(result) {\n  if (!result) {\n    return '作業を保留しました。';\n  }\n  var message = result.ok ? '作業が完了しました。' : '作業を保留しました。';\n  var duration = typeof result.durationMs === 'number'\n    ? result.durationMs\n    : typeof result.elapsedMs === 'number'\n      ? result.elapsedMs\n      : null;\n  if (duration !== null) {\n    message += ' (処理時間: ' + duration + 'ms)';\n  }\n  return message;\n}\n"
+      },
+      {
+        "path": "cases/duration.json",
+        "content": "[\n  { \"fn\": \"formatResult\", \"input\": { \"ok\": true, \"durationMs\": 1250 }, \"op\": \"includes\", \"expected\": \"処理時間: 1250ms\" },\n  { \"fn\": \"formatResult\", \"input\": { \"ok\": false, \"durationMs\": 1250 }, \"op\": \"includes\", \"expected\": \"処理時間: 1250ms\" }\n]\n"
+      }
+    ]
+  },
+  "tests": {
+    "pass": true,
+    "results": [
+      {
+        "name": "result-success",
+        "pass": true
+      },
+      {
+        "name": "result-failure",
+        "pass": true
+      },
+      {
+        "name": "planner-empty",
+        "pass": true
+      },
+      {
+        "name": "baseline.json:0",
+        "pass": true
+      },
+      {
+        "name": "baseline.json:1",
+        "pass": true
+      },
+      {
+        "name": "duration.json:0",
+        "pass": true
+      },
+      {
+        "name": "duration.json:1",
+        "pass": true
+      },
+      {
+        "name": "duration:1432",
+        "pass": true
+      },
+      {
+        "name": "duration:2786",
+        "pass": true
+      }
+    ]
+  },
+  "candidateHash": "8c87d2946a631741b9c33d99b437e44fec950b445ae08e37cd6da07ecb49c545",
+  "status": "TESTED"
+}

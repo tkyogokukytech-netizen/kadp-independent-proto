@@ -1,0 +1,4 @@
+[
+  { "fn": "formatResult", "input": { "ok": true, "durationMs": 1250 }, "op": "includes", "expected": "処理時間: 1250ms" },
+  { "fn": "formatResult", "input": { "ok": false, "durationMs": 1250 }, "op": "includes", "expected": "処理時間: 1250ms" }
+]
