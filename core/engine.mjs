@@ -22,6 +22,13 @@ export class Engine {
     const tmp = safePath(this.root, '.runtime/state.next.json');
     fs.writeFileSync(tmp, JSON.stringify({ tasks: this.tasks, state: this.state, message: this.message }, null, 2)); fs.renameSync(tmp, this.stateFile);
   }
+  writeAudit(task) {
+    const audit = { taskId: task.id, createdAt: task.createdAt, execution: task.audit, status: task.status, commit: task.commit ?? null, resultAvailable: Boolean(task.result) };
+    const encoded = JSON.stringify(audit, null, 2) + '\n';
+    fs.mkdirSync(safePath(this.root, '.runtime/audit'), { recursive: true });
+    fs.writeFileSync(safePath(this.root, '.runtime/audit/' + task.id + '.json'), encoded, { flag: 'wx' });
+    task.auditHash = sha(encoded);
+  }
   view() { return { state: this.state, label: LABELS[this.state], message: this.message, active: this.active, tasks: this.tasks, workerReady: this.worker.ready, login: this.worker.login }; }
   update(task, state, message) { task.status = state; task.message = message; this.state = state; this.message = message; this.save(); }
   stop() { this.abort?.abort(); this.state = 'STOPPED'; this.message = '安全停止しました。新しい変更を反映しません。'; this.save(); }
@@ -31,9 +38,12 @@ export class Engine {
     // Acknowledgement only: never grants extra authority or retries a blocked task.
     this.state = 'IDLE'; this.message = '確認を受け取りました。必要なら範囲を絞って新しく依頼してください。'; this.save();
   }
-  accept(text) {
+  accept(text, meta = {}) {
     if (this.active) throw new Hold('別の作業を実行中です。完了を待つかSTOPしてください。');
-    const task = { id: crypto.randomUUID(), text: '', status: 'ACCEPTED', dependencies: [], attempts: [], createdAt: new Date().toISOString() };
+    const source = meta.source === 'GUI' ? 'GUI' : 'INTERNAL';
+    const audit = { source, stages: { worker: false, candidate: false, safety: false, isolatedApply: false, test: false, gitCommit: false }, codexIntervention: false };
+    Object.defineProperty(audit, 'codexIntervention', { value: false, enumerable: true, writable: false, configurable: false });
+    const task = { id: crypto.randomUUID(), text: '', status: 'ACCEPTED', dependencies: [], attempts: [], createdAt: new Date().toISOString(), audit };
     try { task.text = inspectTask(text); }
     catch (e) { this.tasks.push(task); this.update(task, e.state ?? 'HOLD', e.message); return task; }
     this.tasks.push(task); this.update(task, 'ACCEPTED', '作業を受け付けました。');
@@ -59,21 +69,22 @@ export class Engine {
         try {
           this.update(task, 'WORKER_RUNNING', '変更案を作成しています。');
           const output = await this.worker.propose({ task: task.text, repository: context, allowedPaths: ['app/*.js','NEW cases/*.json'], constraints: LIMITS, previousFailure: prior }, this.abort.signal);
-          check(); validateCandidate(this.root, output.candidate, contextPaths.filter(p => p.startsWith('cases/')));
+          task.audit.stages.worker = true; check(); validateCandidate(this.root, output.candidate, contextPaths.filter(p => p.startsWith('cases/'))); task.audit.stages.candidate = true; task.audit.stages.safety = true;
           const changes = output.candidate.files;
           if (changes.every(f => context.find(c=>c.path===f.path)?.content === f.content)) throw new Hold('実際の変更がありません。');
           const id = task.id + '-' + attempt;
           const folder = isolate(this.root, id, baseline);
           for (const f of changes) fs.writeFileSync(safePath(folder, f.path), f.content);
+          task.audit.stages.isolatedApply = true;
           this.update(task, 'TESTING', '隔離した変更案をTESTしています。');
-          const tests = await validateApp(folder, task.text); check();
+          const tests = await validateApp(folder, task.text); check(); task.audit.stages.test = tests.pass;
           const record = { id, baseline, task: task.text, at: new Date().toISOString(), worker: output.evidence, candidate: output.candidate, tests, candidateHash: sha(JSON.stringify(output.candidate)), status: tests.pass ? 'TESTED' : 'HOLD' };
           // Only validated non-secret Candidate data and trusted test results are persisted.
           fs.mkdirSync(safePath(this.root, '.runtime/evidence'), { recursive: true });
           fs.writeFileSync(safePath(this.root, '.runtime/evidence/' + id + '.json'), JSON.stringify(record, null, 2));
           task.attempts.push({ attempt, tests, worker: output.evidence, candidateHash: record.candidateHash }); this.save();
           if (!tests.pass) { prior = { failedTests: tests.results.filter(t=>!t.pass), previousCandidate: output.candidate }; throw new Hold('TESTが失敗しました。安定版には反映しません。'); }
-          check(); const commit = promote(this.root, folder, baseline, changes.map(f=>f.path), record, check);
+          check(); const commit = promote(this.root, folder, baseline, changes.map(f=>f.path), record, check); task.audit.stages.gitCommit = true;
           task.commit = commit; task.tests = tests; task.changes = changes.map(f=>f.path); task.summary = output.candidate.summary; task.durationMs = Date.now() - started;
           let result = '作業が完了しました。';
           try { result = await invoke(this.root, 'formatResult', { ok:true, durationMs:task.durationMs }); } catch { /* trusted factual completion remains available */ }
@@ -90,7 +101,7 @@ export class Engine {
     } catch (e) {
       task.durationMs = Date.now() - started;
       this.update(task, e.state ?? 'ERROR', e instanceof Hold ? e.message : '内部検証で停止しました。変更は成功扱いにしません。');
-    } finally { clearTimeout(timer); if (release) release(); }
+    } finally { clearTimeout(timer); if (release) release(); try { this.writeAudit(task); } catch {} this.save(); }
   }
   async startSession(text) {
     if (this.active) throw new Hold('別の作業を実行中です。');

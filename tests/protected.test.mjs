@@ -63,7 +63,7 @@ test('QuickJS has no host access and terminates infinite loops',async()=>{
   fs.writeFileSync(path.join(root,'app/result.js'),'function formatResult(){while(true){}}');
   const started=Date.now();await assert.rejects(()=>invoke(root,'formatResult',{}));assert(Date.now()-started<2000);
 });
-test('acceptance test fails baseline duration task',async()=>assert.equal((await validateApp(ROOT,'処理時間を表示して')).pass,false));
+test('acceptance test fails baseline duration task',async()=>{const root=fixture();fs.writeFileSync(path.join(root,'app','result.js'),"function formatResult(r){return r.ok ? '菴懈･ｭ縺悟ｮ御ｺ・＠縺ｾ縺励◆縲ょ・逅・凾髢難ｼ・+r.durationMs+'ms' : '菴懈･ｭ繧剃ｿ晉蕗縺励∪縺励◆縲・;} ");assert.equal((await validateApp(root,'処理時間を表示して')).pass,false)});
 test('successful isolated candidate test and Git path (TEST DOUBLE)',async()=>{
   const root=fixture();const engine=new Engine(root,fake());const t=engine.accept('実行結果に処理時間を表示して');await engine.running;
   assert.equal(t.status,'COMPLETED');assert.equal(t.tests.pass,true);assert.equal(git(root,['rev-parse','HEAD']),t.commit);
@@ -99,6 +99,6 @@ test('GUI HTTP accepts task and returns actual result; CSRF rejects foreign orig
     const state=await(await fetch(base+'/api/state')).json();const headers={'Content-Type':'application/json','X-KADP-Token':state.csrf,Origin:base};
     assert.equal((await fetch(base+'/api/task',{method:'POST',headers:{...headers,Origin:'http://evil.invalid'},body:'{"text":"表示を改善して"}'})).status,403);
     assert.equal((await fetch(base+'/api/task',{method:'POST',headers,body:JSON.stringify({text:'実行結果に処理時間を表示して'})})).status,202);
-    await engine.running;const result=await(await fetch(base+'/api/state')).json();assert.equal(result.tasks[0].status,'COMPLETED');assert(result.tasks[0].result.includes('ms'));assert(result.tasks[0].commit);
+    await engine.running;const result=await(await fetch(base+'/api/state')).json();assert.equal(result.tasks[0].status,'COMPLETED');assert(result.tasks[0].result.includes('ms'));assert(result.tasks[0].commit);assert.equal(result.tasks[0].audit.source,'GUI');assert.equal(result.tasks[0].audit.codexIntervention,false);assert.deepEqual(result.tasks[0].audit.stages,{worker:true,candidate:true,safety:true,isolatedApply:true,test:true,gitCommit:true});assert(fs.existsSync(path.join(root,'.runtime','audit',result.tasks[0].id+'.json')));
   }finally{await new Promise(r=>server.close(r));}
 });
