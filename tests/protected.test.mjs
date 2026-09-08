@@ -10,6 +10,7 @@ import { validateApp } from '../core/validation.mjs';
 import { Engine } from '../core/engine.mjs';
 import { git } from '../core/git.mjs';
 import { createServer } from '../core/server.mjs';
+import { extractOAuthUrl } from '../core/antigravity.mjs';
 const ROOT=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 function fixture() {
   const root=path.join(ROOT,'.runtime','tests',crypto.randomUUID());fs.mkdirSync(root,{recursive:true});
@@ -20,6 +21,14 @@ function fixture() {
 const proposal=content=>({candidate:{summary:'テストダブルによる表示変更',files:[{path:'app/result.js',content}]},evidence:{worker:'TEST_DOUBLE_NOT_REAL_AI',promptHash:'fixture',responseHash:'fixture'}});
 const good="function formatResult(r){return r.ok ? '作業が完了しました。処理時間：'+r.durationMs+'ms' : '作業を保留しました。';}";
 function fake(content=good) {return {ready:true,login:{state:'IDLE',message:'TEST ONLY'},async propose(){return proposal(content);},async connect(){}};}
+
+test('official Antigravity OAuth URL survives PTY wrapping without reconstruction',()=>{
+  const official = 'https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=official-client&redirect_uri=http%3A%2F%2F127.0.0.1%3A4317%2Foauth&scope=openid%20email&state=official-state&code_challenge=official-challenge&code_challenge_method=S256';
+  const wrapped = 'Authentication required. Open:\r\n' + official.slice(0, 118) + '\r\n' + official.slice(118) + '\r\nWaiting for authentication';
+  assert.equal(extractOAuthUrl(wrapped), official);
+  assert.equal(extractOAuthUrl('https://accounts.google.com/o/oauth2/v2/auth?response_type=code\r\nWaiting for authentication'), 'https://accounts.google.com/o/oauth2/v2/auth?response_type=code');
+  assert.equal(extractOAuthUrl('Authentication required; no URL'), null);
+});
 
 test('normal safe Japanese task',()=>assert.equal(inspectTask('実行結果に処理時間を表示して'),'実行結果に処理時間を表示して'));
 test('dangerous task and private data fail closed',()=>{

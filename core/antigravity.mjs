@@ -5,6 +5,16 @@ import { Hold, LIMITS, privateText, sha } from './safety.mjs';
 
 // Provider adapter. Engine/Worker Interface stays provider-neutral: only this file knows agy flags.
 export const ANTIGRAVITY_WORKER_ID = 'official-antigravity-cli';
+export function extractOAuthUrl(output) {
+  const clean = String(output).replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '');
+  const start = clean.indexOf('https://accounts.google.com/');
+  if (start < 0) return null;
+  let tail = clean.slice(start);
+  const marker = tail.search(/Waiting for authentication|Or,? paste the authorization code/i);
+  if (marker >= 0) tail = tail.slice(0, marker);
+  const url = tail.replace(/[\r\n\t ]+/g, '').replace(/[.]+$/, '');
+  return /^https:\/\/accounts\.google\.com\/[A-Za-z0-9/?=&+_.:%~#@\-]+$/.test(url) ? url : null;
+}
 export class AntigravityWorker {
   constructor(root, executable = path.join(process.env.LOCALAPPDATA ?? '', 'agy', 'bin', 'agy.exe')) {
     this.root = root; this.executable = executable; this.ready = false; this.codeSubmitted = false;
@@ -29,8 +39,8 @@ export class AntigravityWorker {
       signal?.addEventListener('abort', abort, { once: true });
       const read = (data, isErr) => {
         const text = data.toString(); if (isErr) err += text; else out += text;
-        const auth = (out + err).match(/https:\/\/accounts\.google\.com\/[^\s]+/);
-        if (auth && !this.login.url) { this.login = { state:'WAITING_HUMAN', message:'Google OAuthをブラウザで開き、認証コードをCLIへ戻してください。', url:auth[0] }; }
+        const auth = extractOAuthUrl(out + err);
+        if (auth && !this.login.url) { this.login = { state:'WAITING_HUMAN', message:'Google OAuthをブラウザで開き、認証コードをCLIへ戻してください。', url:auth }; }
         if (Buffer.byteLength(out + err) > 120000) { child.kill(); finish(new Hold('Worker応答が大きすぎます。')); }
       };
       child.onData(data => read(data, false));
