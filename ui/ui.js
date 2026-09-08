@@ -27,7 +27,7 @@ async function refresh(){
     }
   }catch{$('error').textContent='KADPへ接続できません。画面を閉じず、起動状態を確認してください。';}
 }
-$('task-form').addEventListener('submit',async e=>{e.preventDefault();if(await send('/api/task',{text:$('task').value}))$('task').value='';});
+$('task-form').addEventListener('submit',async e=>{e.preventDefault();const text=$('task').value;const kind=/(?:^|\s)(?:自己開発|SELF_DEVELOPMENT_CHANGE)(?:\s|:|：|$)/i.test(text)?'SELF_DEVELOPMENT_CHANGE':'CHANGE';if(await send('/api/task',{text,kind}))$('task').value='';});
 $('stop').onclick=()=>send('/api/stop');$('ok').onclick=()=>send('/api/decision',{ok:true});$('ng').onclick=()=>send('/api/decision',{ok:false});
 $('connect').onclick=()=>send('/api/connect');$('session').onclick=()=>send('/api/session',{text:$('backlog').value});
 $('send-code').onclick=async()=>{if(await send('/api/auth-code',{code:$('auth-code').value}))$('auth-code').value='';};

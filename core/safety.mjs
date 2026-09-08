@@ -3,16 +3,19 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 export const LIMITS = Object.freeze({ attempts: 2, sameFailure: 2, taskMs: 1800000, sessionMs: 43200000, tasks: 6, bytes: 100000 });
+export const TASK_TYPES = Object.freeze({ CHANGE: 'CHANGE', SELF_DEVELOPMENT_CHANGE: 'SELF_DEVELOPMENT_CHANGE' });
 export class Hold extends Error { constructor(message, state = 'HOLD') { super(message); this.state = state; } }
 export const sha = value => crypto.createHash('sha256').update(value).digest('hex');
 export function privateText(text) {
   return /(?:AIza[\w-]{25,}|sk-[\w-]{16,}|gh[pousr]_[\w]{15,}|-----BEGIN .*PRIVATE KEY|(?:password|api[_ -]?key|access[_ -]?token|secret)\s*[:=]\s*["']?[^\s"']{6,}|[\w.+-]+@[\w.-]+\.[a-z]{2,}|\b\d{3}[- ]\d{4}[- ]\d{4}\b)/i.test(text);
 }
-export function inspectTask(text) {
+export function inspectTask(text, kind = TASK_TYPES.CHANGE) {
+  if (!Object.values(TASK_TYPES).includes(kind)) throw new Hold('Unknown task type.', 'WAITING_HUMAN');
   if (typeof text !== 'string' || !text.trim() || text.length > 4000) throw new Hold('作業を短い文章で入力してください。', 'WAITING_HUMAN');
   if (privateText(text)) throw new Hold('秘密情報または個人情報の可能性があるため、保存・送信しません。取り除いて入力してください。', 'WAITING_HUMAN');
   if (/PROD|本番|Money\s*Forward|マネーフォワード|送信|メール|LINE|SNS|購入|予約|契約|課金|支払|送金|削除|認証.*変更|権限.*変更/i.test(text)) throw new Hold('この作業は現在の安全な自己開発範囲を超えています。', 'WAITING_HUMAN');
   if (/(Safety\s*Kernel|Constitution|protected|保護.*(?:ファイル|テスト)|安全規則).*(変更|修正|解除|弱|書換)/i.test(text)) throw new Hold('安全基盤の変更には別途人間の判断が必要です。ここでは適用できません。', 'WAITING_HUMAN');
+  if (kind === TASK_TYPES.SELF_DEVELOPMENT_CHANGE && /(?:core[\\/]|tests?[\\/]|ui[\\/]|package\.json|CONSTITUTION|Safety\s*Kernel|protected|PROD|本番|認証|Secret|秘密|権限)/i.test(text)) throw new Hold('Self-development scope is outside the DEV/TEST allowlist.', 'WAITING_HUMAN');
   return text.trim();
 }
 export function safePath(root, relative) {

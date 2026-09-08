@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
-import { Hold, LIMITS, inspectTask, safePath, acquireLock, validateCandidate, sha, privateText } from './safety.mjs';
+import { Hold, LIMITS, TASK_TYPES, inspectTask, safePath, acquireLock, validateCandidate, sha, privateText } from './safety.mjs';
 import { git, clean, isolate, promote } from './git.mjs';
 import { validateApp } from './validation.mjs';
 import { invoke } from './sandbox.mjs';
@@ -43,8 +43,9 @@ export class Engine {
     const source = meta.source === 'GUI' ? 'GUI' : 'INTERNAL';
     const audit = { source, stages: { worker: false, candidate: false, safety: false, isolatedApply: false, test: false, gitCommit: false }, codexIntervention: false };
     Object.defineProperty(audit, 'codexIntervention', { value: false, enumerable: true, writable: false, configurable: false });
-    const task = { id: crypto.randomUUID(), text: '', status: 'ACCEPTED', dependencies: [], attempts: [], createdAt: new Date().toISOString(), audit };
-    try { task.text = inspectTask(text); }
+    const kind = meta.kind ?? TASK_TYPES.CHANGE;
+    const task = { id: crypto.randomUUID(), kind, text: '', status: 'ACCEPTED', dependencies: [], attempts: [], createdAt: new Date().toISOString(), audit };
+    try { task.text = inspectTask(text, kind); }
     catch (e) { this.tasks.push(task); this.update(task, e.state ?? 'HOLD', e.message); return task; }
     this.tasks.push(task); this.update(task, 'ACCEPTED', '作業を受け付けました。');
     this.active = true; this.abort = new AbortController();
@@ -68,7 +69,7 @@ export class Engine {
         check(); this.update(task, 'RUNNING', '安全な作業領域を確認しています。');
         try {
           this.update(task, 'WORKER_RUNNING', '変更案を作成しています。');
-          const output = await this.worker.propose({ task: task.text, repository: context, allowedPaths: ['app/*.js','NEW cases/*.json'], constraints: LIMITS, previousFailure: prior }, this.abort.signal);
+          const output = await this.worker.propose({ task: task.text, kind: task.kind, repository: context, allowedPaths: ['app/*.js','NEW cases/*.json'], constraints: LIMITS, previousFailure: prior }, this.abort.signal);
           task.audit.stages.worker = true; check(); validateCandidate(this.root, output.candidate, contextPaths.filter(p => p.startsWith('cases/'))); task.audit.stages.candidate = true; task.audit.stages.safety = true;
           const changes = output.candidate.files;
           if (changes.every(f => context.find(c=>c.path===f.path)?.content === f.content)) throw new Hold('実際の変更がありません。');

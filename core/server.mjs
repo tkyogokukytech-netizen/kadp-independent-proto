@@ -25,7 +25,7 @@ export function createServer(root, worker = new AntigravityWorker(root)) {
     try {
       let raw=''; for await(const chunk of req) { raw+=chunk; if(Buffer.byteLength(raw)>20000) throw new Hold('入力が長すぎます。'); }
       const body=JSON.parse(raw || '{}');
-      if(req.url==='/api/task') { const task=engine.accept(body.text, { source: 'GUI' }); return reply(202,{id:task.id}); }
+      if(req.url==='/api/task') { const task=engine.accept(body.text, { source: 'GUI', kind: body.kind }); return reply(202,{id:task.id}); }
       if(req.url==='/api/session') { await engine.startSession(body.text); return reply(202,{accepted:true}); }
       if(req.url==='/api/stop') { engine.stop(); return reply(200,{stopped:true}); }
       if(req.url==='/api/decision') { if(typeof body.ok!=='boolean') throw new Hold('確認内容が不正です。'); engine.decide(body.ok); return reply(200,{acknowledged:true}); }
