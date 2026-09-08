@@ -4,10 +4,10 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { Engine } from './engine.mjs';
-import { GeminiWorker } from './worker.mjs';
+import { AntigravityWorker } from './antigravity.mjs';
 import { Hold, safePath } from './safety.mjs';
 
-export function createServer(root, worker = new GeminiWorker(root)) {
+export function createServer(root, worker = new AntigravityWorker(root)) {
   const engine = new Engine(root, worker); const csrf = crypto.randomBytes(24).toString('hex');
   const server = http.createServer(async (req, res) => {
     const expected = '127.0.0.1:' + server.address().port;
