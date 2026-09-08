@@ -85,6 +85,7 @@ export class AntigravityWorker {
   async propose(request, signal) {
     if (!this.ready) throw new Hold('Google OAuthの本人認証を行ってください。', 'WAITING_HUMAN');
     const prompt = [
+      'For a clear safe task, return a Candidate JSON. Use hold only when safety or genuine ambiguity prevents a safe change.',
       'KADP Independent ProtoのCandidate-only Workerです。ツールを使わず、JSONだけ返してください。',
       '形式: {"summary":"日本語説明","files":[{"path":"app/result.js","content":"完全なファイル内容"}]}。曖昧なら {"hold":"理由"}。TESTやGitを実行したとは言わない。',
       '変更可能範囲はapp/*.jsとNEW cases/*.jsonだけ。core/ui/既存cases/Constitutionは保護対象。',
