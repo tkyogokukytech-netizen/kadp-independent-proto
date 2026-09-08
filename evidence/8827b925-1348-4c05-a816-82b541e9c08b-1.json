@@ -1,0 +1,64 @@
+{
+  "id": "8827b925-1348-4c05-a816-82b541e9c08b-1",
+  "baseline": "82ba2d6d6a38968648c5f59d7f2b77e1c0163689",
+  "task": "Add another safe test case to cases/anothercase.json that checks formatResult durationMs includes 2786.",
+  "at": "2026-09-08T19:51:12.431Z",
+  "worker": {
+    "worker": "official-antigravity-cli",
+    "promptHash": "c77699048fdfb6100061b9c53e079589149e8e7e70d2472a6fdb2a5353fafd99",
+    "responseHash": "132162e7870cca328521d4d10459ae8d4d16f1059ee54de12aeca6516a84258e",
+    "stats": {}
+  },
+  "candidate": {
+    "summary": "cases/anothercase.jsonにformatResultのdurationMsが2786を含むことを確認するテストケースを追加しました。",
+    "files": [
+      {
+        "path": "cases/anothercase.json",
+        "content": "[\n  { \"fn\": \"formatResult\", \"input\": { \"ok\": true, \"durationMs\": 2786 }, \"op\": \"includes\", \"expected\": \"2786\" }\n]\n"
+      }
+    ]
+  },
+  "tests": {
+    "pass": true,
+    "results": [
+      {
+        "name": "result-success",
+        "pass": true
+      },
+      {
+        "name": "result-failure",
+        "pass": true
+      },
+      {
+        "name": "planner-empty",
+        "pass": true
+      },
+      {
+        "name": "anothercase.json:0",
+        "pass": true
+      },
+      {
+        "name": "baseline.json:0",
+        "pass": true
+      },
+      {
+        "name": "baseline.json:1",
+        "pass": true
+      },
+      {
+        "name": "duration.json:0",
+        "pass": true
+      },
+      {
+        "name": "duration.json:1",
+        "pass": true
+      },
+      {
+        "name": "newcase.json:0",
+        "pass": true
+      }
+    ]
+  },
+  "candidateHash": "132162e7870cca328521d4d10459ae8d4d16f1059ee54de12aeca6516a84258e",
+  "status": "TESTED"
+}
