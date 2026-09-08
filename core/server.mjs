@@ -30,6 +30,7 @@ export function createServer(root, worker = new AntigravityWorker(root)) {
       if(req.url==='/api/stop') { engine.stop(); return reply(200,{stopped:true}); }
       if(req.url==='/api/decision') { if(typeof body.ok!=='boolean') throw new Hold('確認内容が不正です。'); engine.decide(body.ok); return reply(200,{acknowledged:true}); }
       if(req.url==='/api/connect') { if(engine.active) throw new Hold('作業完了後に接続してください。'); void worker.connect(); return reply(202,{connecting:true}); }
+      if(req.url==='/api/auth-code') { worker.submitAuthCode(body.code); return reply(202,{submitted:true}); }
       return reply(404,{error:'この操作はありません。'});
     } catch(e) { return reply(e instanceof Hold?409:400,{error:e instanceof Hold?e.message:'入力を確認してください。'}); }
   });

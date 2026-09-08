@@ -13,6 +13,7 @@ async function refresh(){
     $('run').disabled=s.active;$('session').disabled=s.active;$('connect').disabled=s.active||s.login.state==='WORKER_RUNNING';
     $('connection').textContent=s.login.message;$('connect-card').hidden=s.workerReady;
     $('login-link').hidden=!s.login.url;if(s.login.url)$('login-link').href=s.login.url;
+    $('auth-box').hidden=!s.login.url;
     $('approval').hidden=!['WAITING_HUMAN','HOLD','ERROR'].includes(s.state);
     $('history').replaceChildren();
     for(const t of s.tasks.slice(-12)){
@@ -29,4 +30,5 @@ async function refresh(){
 $('task-form').addEventListener('submit',async e=>{e.preventDefault();if(await send('/api/task',{text:$('task').value}))$('task').value='';});
 $('stop').onclick=()=>send('/api/stop');$('ok').onclick=()=>send('/api/decision',{ok:true});$('ng').onclick=()=>send('/api/decision',{ok:false});
 $('connect').onclick=()=>send('/api/connect');$('session').onclick=()=>send('/api/session',{text:$('backlog').value});
+$('send-code').onclick=async()=>{if(await send('/api/auth-code',{code:$('auth-code').value}))$('auth-code').value='';};
 refresh();setInterval(refresh,1500);
