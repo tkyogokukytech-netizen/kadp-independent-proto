@@ -1,0 +1,118 @@
+import fs from 'node:fs';
+import crypto from 'node:crypto';
+import { Hold, LIMITS, inspectTask, safePath, acquireLock, validateCandidate, sha, privateText } from './safety.mjs';
+import { git, clean, isolate, promote } from './git.mjs';
+import { validateApp } from './validation.mjs';
+import { invoke } from './sandbox.mjs';
+
+export const LABELS = { IDLE:'待機中', ACCEPTED:'作業受付', RUNNING:'作業中', WORKER_RUNNING:'Worker処理中', TESTING:'TEST中', COMPLETED:'完了', WAITING_HUMAN:'確認待ち', HOLD:'HOLD', STOPPED:'安全停止', ERROR:'エラー' };
+export class Engine {
+  constructor(root, worker) {
+    this.root = root; this.worker = worker; this.active = false; this.tasks = []; this.state = 'IDLE'; this.message = '何を改善しましょうか。'; this.sessionStart = 0;
+    fs.mkdirSync(safePath(root, '.runtime'), { recursive: true });
+    this.stateFile = safePath(root, '.runtime/state.json');
+    if (fs.existsSync(this.stateFile)) {
+      try { this.tasks = JSON.parse(fs.readFileSync(this.stateFile, 'utf8')).tasks ?? []; }
+      catch { this.state = 'WAITING_HUMAN'; this.message = '前回の状態を読み取れません。自動再開しません。'; }
+    }
+    if (fs.existsSync(safePath(root, '.runtime/task.lock'))) { this.state = 'WAITING_HUMAN'; this.message = '前回のロックが残っています。自動再開しません。'; }
+    for (const t of this.tasks) if (['RUNNING','WORKER_RUNNING','TESTING','ACCEPTED'].includes(t.status)) { t.status = 'HOLD'; t.message = '前回の処理が中断されました。自動再開しません。'; }
+  }
+  save() {
+    const tmp = safePath(this.root, '.runtime/state.next.json');
+    fs.writeFileSync(tmp, JSON.stringify({ tasks: this.tasks, state: this.state, message: this.message }, null, 2)); fs.renameSync(tmp, this.stateFile);
+  }
+  view() { return { state: this.state, label: LABELS[this.state], message: this.message, active: this.active, tasks: this.tasks, workerReady: this.worker.ready, login: this.worker.login }; }
+  update(task, state, message) { task.status = state; task.message = message; this.state = state; this.message = message; this.save(); }
+  stop() { this.abort?.abort(); this.state = 'STOPPED'; this.message = '安全停止しました。新しい変更を反映しません。'; this.save(); }
+  decide(ok) {
+    if (this.active) throw new Hold('実行中は確認操作を行えません。');
+    if (!ok) { this.stop(); return; }
+    // Acknowledgement only: never grants extra authority or retries a blocked task.
+    this.state = 'IDLE'; this.message = '確認を受け取りました。必要なら範囲を絞って新しく依頼してください。'; this.save();
+  }
+  accept(text) {
+    if (this.active) throw new Hold('別の作業を実行中です。完了を待つかSTOPしてください。');
+    const task = { id: crypto.randomUUID(), text: '', status: 'ACCEPTED', dependencies: [], attempts: [], createdAt: new Date().toISOString() };
+    try { task.text = inspectTask(text); }
+    catch (e) { this.tasks.push(task); this.update(task, e.state ?? 'HOLD', e.message); return task; }
+    this.tasks.push(task); this.update(task, 'ACCEPTED', '作業を受け付けました。');
+    this.active = true; this.abort = new AbortController();
+    this.running = this.run(task).finally(() => { this.active = false; this.save(); });
+    return task;
+  }
+  async run(task) {
+    let release; const started = Date.now(); let prior = null; let repeat = 0; let lastFingerprint = '';
+    const check = () => {
+      if (this.abort.signal.aborted) throw new Hold('STOPにより変更の反映を中止しました。', 'STOPPED');
+      if (Date.now() - started >= LIMITS.taskMs || (this.sessionStart && Date.now() - this.sessionStart >= LIMITS.sessionMs)) throw new Hold('制限時間に達しました。');
+    };
+    const timer = setTimeout(() => this.abort.abort(), LIMITS.taskMs);
+    try {
+      release = acquireLock(this.root); check(); clean(this.root);
+      const baseline = git(this.root, ['rev-parse', 'HEAD']); task.baseline = baseline;
+      const contextPaths = git(this.root, ['ls-files', 'app', 'cases']).split(/\r?\n/).filter(Boolean);
+      const context = contextPaths.map(p => ({ path:p, content:fs.readFileSync(safePath(this.root,p),'utf8') }));
+      if (privateText(JSON.stringify(context))) throw new Hold('コードに秘密情報の疑いがあるため送信しません。');
+      for (let attempt = 1; attempt <= LIMITS.attempts; attempt++) {
+        check(); this.update(task, 'RUNNING', '安全な作業領域を確認しています。');
+        try {
+          this.update(task, 'WORKER_RUNNING', '変更案を作成しています。');
+          const output = await this.worker.propose({ task: task.text, repository: context, allowedPaths: ['app/*.js','NEW cases/*.json'], constraints: LIMITS, previousFailure: prior }, this.abort.signal);
+          check(); validateCandidate(this.root, output.candidate, contextPaths.filter(p => p.startsWith('cases/')));
+          const changes = output.candidate.files;
+          if (changes.every(f => context.find(c=>c.path===f.path)?.content === f.content)) throw new Hold('実際の変更がありません。');
+          const id = task.id + '-' + attempt;
+          const folder = isolate(this.root, id, baseline);
+          for (const f of changes) fs.writeFileSync(safePath(folder, f.path), f.content);
+          this.update(task, 'TESTING', '隔離した変更案をTESTしています。');
+          const tests = await validateApp(folder, task.text); check();
+          const record = { id, baseline, task: task.text, at: new Date().toISOString(), worker: output.evidence, candidate: output.candidate, tests, candidateHash: sha(JSON.stringify(output.candidate)), status: tests.pass ? 'TESTED' : 'HOLD' };
+          // Only validated non-secret Candidate data and trusted test results are persisted.
+          fs.mkdirSync(safePath(this.root, '.runtime/evidence'), { recursive: true });
+          fs.writeFileSync(safePath(this.root, '.runtime/evidence/' + id + '.json'), JSON.stringify(record, null, 2));
+          task.attempts.push({ attempt, tests, worker: output.evidence, candidateHash: record.candidateHash }); this.save();
+          if (!tests.pass) { prior = { failedTests: tests.results.filter(t=>!t.pass), previousCandidate: output.candidate }; throw new Hold('TESTが失敗しました。安定版には反映しません。'); }
+          check(); const commit = promote(this.root, folder, baseline, changes.map(f=>f.path), record, check);
+          task.commit = commit; task.tests = tests; task.changes = changes.map(f=>f.path); task.summary = output.candidate.summary; task.durationMs = Date.now() - started;
+          let result = '作業が完了しました。';
+          try { result = await invoke(this.root, 'formatResult', { ok:true, durationMs:task.durationMs }); } catch { /* trusted factual completion remains available */ }
+          task.result = typeof result === 'string' ? result : '作業が完了しました。';
+          this.update(task, 'COMPLETED', 'TEST成功・Git記録まで完了しました。'); return;
+        } catch (e) {
+          check();
+          const fingerprint = sha(JSON.stringify(prior?.failedTests ?? e.message));
+          repeat = fingerprint === lastFingerprint ? repeat + 1 : 1; lastFingerprint = fingerprint;
+          if (e.state === 'WAITING_HUMAN' || e.state === 'STOPPED' || attempt === LIMITS.attempts || repeat >= LIMITS.sameFailure) throw e;
+          prior ??= { error: e instanceof Hold ? e.message : '内部検証エラー' };
+        }
+      }
+    } catch (e) {
+      task.durationMs = Date.now() - started;
+      this.update(task, e.state ?? 'ERROR', e instanceof Hold ? e.message : '内部検証で停止しました。変更は成功扱いにしません。');
+    } finally { clearTimeout(timer); if (release) release(); }
+  }
+  async startSession(text) {
+    if (this.active) throw new Hold('別の作業を実行中です。');
+    const lines = text.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+    if (!lines.length || lines.length > LIMITS.tasks) throw new Hold('まとめる作業は1〜6件にしてください。');
+    const tasks = lines.map(line => ({ id:crypto.randomUUID(),text:inspectTask(line),status:'READY',dependencies:[],attempts:[],createdAt:new Date().toISOString() }));
+    this.tasks.push(...tasks); this.active = true; this.abort = new AbortController(); this.sessionStart = Date.now(); this.save();
+    // Generic protected action dispatcher. The initial pure plan implementation always stops.
+    // Selection/continuation behavior belongs to the independently developed app/workflow.js.
+    this.running = (async () => {
+      try {
+        for (let i=0; i<LIMITS.tasks; i++) {
+          if (this.abort.signal.aborted || Date.now()-this.sessionStart >= LIMITS.sessionMs) throw new Hold('セッションを安全停止しました。','STOPPED');
+          const decision = await invoke(this.root,'plan',{tasks,elapsedMs:Date.now()-this.sessionStart});
+          if (decision?.action === 'stop') { this.state='HOLD'; this.message='継続可能な作業がないか、無人開発機能が未実装です。'; break; }
+          const next = tasks.find(t=>t.id === decision?.id);
+          if (decision?.action !== 'run' || !next || next.status !== 'READY' || next.dependencies.some(id=>tasks.find(t=>t.id===id)?.status !== 'COMPLETED')) throw new Hold('実行順序を安全に確認できません。');
+          inspectTask(next.text); await this.run(next);
+        }
+      } catch(e) { this.state=e.state??'HOLD'; this.message=e instanceof Hold?e.message:'無人処理を安全に確認できず停止しました。'; }
+      finally { this.active=false; this.sessionStart=0; this.save(); }
+    })();
+    return tasks;
+  }
+}
