@@ -100,7 +100,7 @@ test('unattended scheduler runs independent tasks and holds repeated failure',as
   }};
   const engine=new Engine(root,worker); await engine.startSession('安全な表示変更A\n意図的な失敗\n安全な表示変更B'); await engine.running;
   const tasks=engine.tasks.slice(-3); assert.equal(tasks[0].status,'COMPLETED'); assert.equal(tasks[1].status,'HOLD'); assert.equal(tasks[2].status,'COMPLETED');
-  assert.equal(tasks[1].attempts.length,0); assert.equal(tasks[0].audit.source,'UNATTENDED'); assert.equal(tasks[0].audit.codexIntervention,false); assert.equal(tasks[1].audit.codexIntervention,false); assert(tasks[0].commit); assert.equal(tasks[1].commit,undefined); assert(tasks[2].commit);
+  assert.equal(tasks[1].attempts.length,0); assert.equal(tasks[1].retryCount,2); assert.equal(tasks[0].audit.source,'UNATTENDED'); assert.equal(tasks[0].audit.codexIntervention,false); assert.equal(tasks[1].audit.codexIntervention,false); assert(tasks[0].commit); assert.equal(tasks[1].commit,undefined); assert(tasks[2].commit);
   for(const t of tasks) assert(fs.existsSync(path.join(root,'.runtime','audit',t.id+'.json')));
 });
 test('GUI HTTP accepts task and returns actual result; CSRF rejects foreign origin (TEST DOUBLE)',async()=>{

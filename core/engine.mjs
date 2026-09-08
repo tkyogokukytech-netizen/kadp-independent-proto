@@ -23,7 +23,7 @@ export class Engine {
     fs.writeFileSync(tmp, JSON.stringify({ tasks: this.tasks, state: this.state, message: this.message }, null, 2)); fs.renameSync(tmp, this.stateFile);
   }
   writeAudit(task) {
-    const audit = { taskId: task.id, createdAt: task.createdAt, execution: task.audit, status: task.status, commit: task.commit ?? null, resultAvailable: Boolean(task.result) };
+    const audit = { taskId: task.id, createdAt: task.createdAt, execution: task.audit, retryCount: task.retryCount ?? 0, status: task.status, commit: task.commit ?? null, resultAvailable: Boolean(task.result) };
     const encoded = JSON.stringify(audit, null, 2) + '\n';
     fs.mkdirSync(safePath(this.root, '.runtime/audit'), { recursive: true });
     fs.writeFileSync(safePath(this.root, '.runtime/audit/' + task.id + '.json'), encoded, { flag: 'wx' });
@@ -64,7 +64,7 @@ export class Engine {
       const contextPaths = git(this.root, ['ls-files', 'app', 'cases']).split(/\r?\n/).filter(Boolean);
       const context = contextPaths.map(p => ({ path:p, content:fs.readFileSync(safePath(this.root,p),'utf8') }));
       if (privateText(JSON.stringify(context))) throw new Hold('コードに秘密情報の疑いがあるため送信しません。');
-      for (let attempt = 1; attempt <= LIMITS.attempts; attempt++) {
+      for (let attempt = 1; attempt <= LIMITS.attempts; attempt++) { task.retryCount = attempt;
         check(); this.update(task, 'RUNNING', '安全な作業領域を確認しています。');
         try {
           this.update(task, 'WORKER_RUNNING', '変更案を作成しています。');
