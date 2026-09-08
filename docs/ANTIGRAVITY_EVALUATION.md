@@ -24,3 +24,9 @@
 正式CLIとOAuth入口は利用可能。実Worker接続は本人認証待ちで未完了。したがってCodex非依存`VERIFIED_E2E`は未達成であり、Antigravity CLIを接続済みと報告しない。
 
 Sources: [Google Codelab — Antigravity CLI](https://codelabs.developers.google.com/antigravity-cli-hands-on?hl=en), [Google Codelab — Accelerating Development with Antigravity CLI](https://codelabs.developers.google.com/genai-for-dev-antigravity-cli?hl=en)
+
+## Authentication diagnosis
+
+The previous adapter launched `agy --print` with a redirected stdin pipe. The official CLI reads its OAuth code from a TTY, so `/api/auth-code` returned 202 while the code was never consumed; the CLI then exited at its internal “Waiting for authentication (timeout 60s)” limit. The GUI kept showing WAITING_HUMAN after that exit.
+
+The adapter now launches the official CLI through a PTY and writes the code to that TTY. Post-submit failures become ERROR and the GUI refreshes state. OAuth codes, tokens, and secrets are never persisted.

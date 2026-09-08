@@ -1,20 +1,23 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
+import * as pty from '@lydell/node-pty';
 import { Hold, LIMITS, privateText, sha } from './safety.mjs';
 
 // Provider adapter. Engine/Worker Interface stays provider-neutral: only this file knows agy flags.
 export const ANTIGRAVITY_WORKER_ID = 'official-antigravity-cli';
 export class AntigravityWorker {
   constructor(root, executable = path.join(process.env.LOCALAPPDATA ?? '', 'agy', 'bin', 'agy.exe')) {
-    this.root = root; this.executable = executable; this.ready = false;
+    this.root = root; this.executable = executable; this.ready = false; this.codeSubmitted = false;
     this.login = { state: 'WAITING_HUMAN', message: 'Google OAuthの本人認証が必要です。' };
   }
   run(prompt, signal) {
     if (privateText(prompt)) return Promise.reject(new Hold('送信前検査で秘密情報の可能性を検出しました。', 'WAITING_HUMAN'));
     return new Promise((resolve, reject) => {
-      const child = spawn(this.executable, ['--mode', 'plan', '--output-format', 'json', '--print-timeout', '180s', '--print=' + prompt], {
-        cwd: path.join(this.root, '.private', 'worker-workspace'), windowsHide: true,
-        stdio: ['pipe', 'pipe', 'pipe']
+      // Antigravity's official OAuth prompt reads from a TTY, not a redirected stdin pipe.
+      const child = pty.spawn(this.executable, ['--mode', 'plan', '--output-format', 'json', '--print-timeout', '180s', '--print=' + prompt], {
+        name: 'xterm-256color', cols: 120, rows: 40,
+        cwd: path.join(this.root, '.private', 'worker-workspace'),
+        env: { ...process.env, NO_COLOR: '1' }
       });
       this.child = child;
       let out = '', err = '', settled = false;
@@ -30,11 +33,10 @@ export class AntigravityWorker {
         if (auth && !this.login.url) { this.login = { state:'WAITING_HUMAN', message:'Google OAuthをブラウザで開き、認証コードをCLIへ戻してください。', url:auth[0] }; }
         if (Buffer.byteLength(out + err) > 120000) { child.kill(); finish(new Hold('Worker応答が大きすぎます。')); }
       };
-      child.stdout.on('data', d => read(d, false)); child.stderr.on('data', d => read(d, true)); child.stdin.on('error', () => {});
-      child.on('error', () => finish(new Hold('Antigravity CLIを起動できません。', 'WAITING_HUMAN')));
-      child.on('close', code => {
+      child.onData(data => read(data, false));
+      child.onExit(({ exitCode }) => {
         if (settled) return;
-        if (code !== 0) return finish(new Hold(this.login.url ? 'Google OAuthの本人操作を完了してください。' : 'Antigravity CLI接続に失敗しました。', 'WAITING_HUMAN'));
+        if (exitCode !== 0) return finish(new Hold(this.login.url ? 'Google OAuthの本人操作を完了してください。' : 'Antigravity CLI接続に失敗しました。', 'WAITING_HUMAN'));
         try {
           const parsed = JSON.parse(out.trim()); const response = parsed.response ?? parsed.text ?? parsed.result;
           if (typeof response !== 'string' || !response.trim()) throw Error();
@@ -46,7 +48,8 @@ export class AntigravityWorker {
   submitAuthCode(code) {
     if (!this.child) throw new Hold('認証セッションが期限切れです。「Googleで接続する」から再開してください。', 'WAITING_HUMAN');
     if (!/^[A-Za-z0-9._~\-\/+=]{4,2048}$/.test(String(code ?? ''))) throw new Hold('認証コードを入力してください。', 'WAITING_HUMAN');
-    this.child.stdin.write(String(code).trim() + '\n');
+    this.codeSubmitted = true;
+    this.child.write(String(code).trim() + '\r');
     return true;
   }
   async connect() {
@@ -54,7 +57,7 @@ export class AntigravityWorker {
       const result = await this.run('Reply exactly READY. Do not use tools or edit files.', undefined);
       if (result.response.trim() !== 'READY') throw new Hold('接続確認の応答が一致しません。');
       this.ready = true; this.login = { state:'IDLE', message:'Antigravity CLI接続済み。' };
-    } catch (e) { this.login = { ...this.login, state:e.state ?? 'ERROR', message:e.message }; }
+    } catch (e) { this.login = { state:(this.codeSubmitted ? 'ERROR' : (e.state ?? 'ERROR')), message:e.message }; }
   }
   async propose(request, signal) {
     if (!this.ready) throw new Hold('Google OAuthの本人認証を行ってください。', 'WAITING_HUMAN');
