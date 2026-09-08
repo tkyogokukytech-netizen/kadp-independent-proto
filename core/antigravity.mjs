@@ -15,6 +15,15 @@ export function extractOAuthUrl(output) {
   const url = tail.replace(/[\r\n\t ]+/g, '').replace(/[.]+$/, '');
   return /^https:\/\/accounts\.google\.com\/[A-Za-z0-9/?=&+_.:%~#@\-]+$/.test(url) ? url : null;
 }
+export function parseCliResponse(output) {
+  const clean = String(output)
+    .replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, '')
+    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '');
+  const start = clean.indexOf('{');
+  const end = clean.lastIndexOf('}');
+  if (start < 0 || end < start) throw Error();
+  return JSON.parse(clean.slice(start, end + 1));
+}
 export class AntigravityWorker {
   constructor(root, executable = path.join(process.env.LOCALAPPDATA ?? '', 'agy', 'bin', 'agy.exe')) {
     this.root = root; this.executable = executable; this.ready = false; this.codeSubmitted = false;
@@ -48,7 +57,7 @@ export class AntigravityWorker {
         if (settled) return;
         if (exitCode !== 0) return finish(new Hold(this.login.url ? 'Google OAuthの本人操作を完了してください。' : 'Antigravity CLI接続に失敗しました。', 'WAITING_HUMAN'));
         try {
-          const parsed = JSON.parse(out.trim()); const response = parsed.response ?? parsed.text ?? parsed.result;
+          const parsed = parseCliResponse(out); const response = parsed.response ?? parsed.text ?? parsed.result;
           if (typeof response !== 'string' || !response.trim()) throw Error();
           finish(null, { response, stats: parsed.stats ?? {} });
         } catch { finish(new Hold('Antigravityの応答形式を確認できません。')); }

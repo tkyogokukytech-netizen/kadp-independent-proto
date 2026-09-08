@@ -10,7 +10,7 @@ import { validateApp } from '../core/validation.mjs';
 import { Engine } from '../core/engine.mjs';
 import { git } from '../core/git.mjs';
 import { createServer } from '../core/server.mjs';
-import { extractOAuthUrl } from '../core/antigravity.mjs';
+import { extractOAuthUrl, parseCliResponse } from '../core/antigravity.mjs';
 const ROOT=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 function fixture() {
   const root=path.join(ROOT,'.runtime','tests',crypto.randomUUID());fs.mkdirSync(root,{recursive:true});
@@ -28,6 +28,11 @@ test('official Antigravity OAuth URL survives PTY wrapping without reconstructio
   assert.equal(extractOAuthUrl(wrapped), official);
   assert.equal(extractOAuthUrl('https://accounts.google.com/o/oauth2/v2/auth?response_type=code\r\nWaiting for authentication'), 'https://accounts.google.com/o/oauth2/v2/auth?response_type=code');
   assert.equal(extractOAuthUrl('Authentication required; no URL'), null);
+});
+test('CLI JSON response tolerates PTY terminal title suffix',()=>{
+  const parsed = parseCliResponse('{"status":"SUCCESS","response":"READY\\n"}\u001b]0;agy.exe\u0007');
+  assert.equal(parsed.status, 'SUCCESS');
+  assert.equal(parsed.response, 'READY\n');
 });
 
 test('normal safe Japanese task',()=>assert.equal(inspectTask('実行結果に処理時間を表示して'),'実行結果に処理時間を表示して'));
