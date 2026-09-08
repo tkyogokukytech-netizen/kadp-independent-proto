@@ -1,0 +1,56 @@
+{
+  "id": "6499b5e1-cbba-4a25-9f62-d1a75c893b96-1",
+  "baseline": "69da09b3b1b092ccd731e1440db61446d40c4236",
+  "task": "実行結果に処理時間を表示して",
+  "at": "2026-09-08T18:58:52.455Z",
+  "worker": {
+    "worker": "official-antigravity-cli",
+    "promptHash": "b0e38b7f1c86a1f62eebc927e18a7c71060717809b7da4ef3e82f94d9efe9f6e",
+    "responseHash": "d34932b2218e842a5c17ba42302a59b95df3e6ff5708d670ae70b3aeb3b05a25",
+    "stats": {}
+  },
+  "candidate": {
+    "summary": "formatResult関数において、resultオブジェクトにdurationMsが数値として存在する場合に処理時間（ms）を結果メッセージに表示するように変更しました。",
+    "files": [
+      {
+        "path": "app/result.js",
+        "content": "// Pure presentation logic. No host capabilities are available here.\nfunction formatResult(result) {\n  var message = result.ok ? '作業が完了しました。' : '作業を保留しました。';\n  if (result && typeof result.durationMs === 'number') {\n    message += ' (処理時間: ' + result.durationMs + 'ms)';\n  }\n  return message;\n}\n"
+      }
+    ]
+  },
+  "tests": {
+    "pass": true,
+    "results": [
+      {
+        "name": "result-success",
+        "pass": true
+      },
+      {
+        "name": "result-failure",
+        "pass": true
+      },
+      {
+        "name": "planner-empty",
+        "pass": true
+      },
+      {
+        "name": "baseline.json:0",
+        "pass": true
+      },
+      {
+        "name": "baseline.json:1",
+        "pass": true
+      },
+      {
+        "name": "duration:1432",
+        "pass": true
+      },
+      {
+        "name": "duration:2786",
+        "pass": true
+      }
+    ]
+  },
+  "candidateHash": "d34932b2218e842a5c17ba42302a59b95df3e6ff5708d670ae70b3aeb3b05a25",
+  "status": "TESTED"
+}
