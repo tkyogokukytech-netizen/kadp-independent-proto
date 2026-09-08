@@ -18,7 +18,8 @@ export function extractOAuthUrl(output) {
 export function parseCliResponse(output) {
   const clean = String(output)
     .replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, '')
-    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '');
+    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/[\r\n]+/g, '');
   const start = clean.indexOf('{');
   const end = clean.lastIndexOf('}');
   if (start < 0 || end < start) throw Error();

@@ -30,7 +30,7 @@ test('official Antigravity OAuth URL survives PTY wrapping without reconstructio
   assert.equal(extractOAuthUrl('Authentication required; no URL'), null);
 });
 test('CLI JSON response tolerates PTY terminal title suffix',()=>{
-  const parsed = parseCliResponse('{"status":"SUCCESS","response":"READY\\n"}\u001b]0;agy.exe\u0007');
+  const parsed = parseCliResponse('{"status":"SUCCESS","response":"READY\\n","to\r\ntal_tokens":1}\u001b]0;agy.exe\u0007');
   assert.equal(parsed.status, 'SUCCESS');
   assert.equal(parsed.response, 'READY\n');
 });
