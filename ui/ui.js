@@ -3,7 +3,7 @@ const $=id=>document.getElementById(id);
 async function send(url,body={}) {
   $('error').textContent='';
   try { const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','X-KADP-Token':csrf},body:JSON.stringify(body)}); const data=await r.json(); if(!r.ok) throw Error(data.error); await refresh(); return true; }
-  catch(e){$('error').textContent=e.message; return false;}
+  catch(e){$('error').textContent=e.message; await refresh(); return false;}
 }
 function paragraph(text,cls){const p=document.createElement('p');p.textContent=text;if(cls)p.className=cls;return p;}
 async function refresh(){

@@ -20,7 +20,9 @@ export class AntigravityWorker {
       let out = '', err = '', settled = false;
       const finish = (e, v) => { if (settled) return; settled = true; this.child = null; clearTimeout(timer); signal?.removeEventListener('abort', abort); e ? reject(e) : resolve(v); };
       const abort = () => { child.kill(); finish(new Hold('停止しました。', 'STOPPED')); };
-      const timer = setTimeout(() => { child.kill(); finish(new Hold('Workerの制限時間に達しました。')); }, LIMITS.taskMs);
+      // OAuth is a human handoff; keep the CLI alive long enough for browser login.
+      // Engine still enforces the normal task/session limits after authentication.
+      const timer = setTimeout(() => { child.kill(); finish(new Hold('認証の制限時間に達しました。', 'WAITING_HUMAN')); }, 900000);
       signal?.addEventListener('abort', abort, { once: true });
       const read = (data, isErr) => {
         const text = data.toString(); if (isErr) err += text; else out += text;
@@ -42,7 +44,8 @@ export class AntigravityWorker {
     });
   }
   submitAuthCode(code) {
-    if (!this.child || !/^[A-Za-z0-9._~\-\/+=]{4,2048}$/.test(String(code ?? ''))) throw new Hold('認証コードを入力してください。', 'WAITING_HUMAN');
+    if (!this.child) throw new Hold('認証セッションが期限切れです。「Googleで接続する」から再開してください。', 'WAITING_HUMAN');
+    if (!/^[A-Za-z0-9._~\-\/+=]{4,2048}$/.test(String(code ?? ''))) throw new Hold('認証コードを入力してください。', 'WAITING_HUMAN');
     this.child.stdin.write(String(code).trim() + '\n');
     return true;
   }
