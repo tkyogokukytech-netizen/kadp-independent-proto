@@ -15,6 +15,7 @@ const ROOT=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 function fixture() {
   const root=path.join(ROOT,'.runtime','tests',crypto.randomUUID());fs.mkdirSync(root,{recursive:true});
   for(const dir of ['app','cases','ui'])fs.cpSync(path.join(ROOT,dir),path.join(root,dir),{recursive:true});
+  if(fs.existsSync(path.join(root,'cases','duration.json')))fs.rmSync(path.join(root,'cases','duration.json'));
   fs.writeFileSync(path.join(root,'.gitignore'),'.runtime/\n.private/\n');
   git(root,['init','-b','main']);git(root,['add','.']);git(root,['commit','-m','test fixture baseline']);return root;
 }
@@ -90,6 +91,17 @@ test('provider failure is surfaced without raw URLs or secrets',()=>{
 test('Git operations scope safe.directory to the target repository',()=>{
   const root=fixture();
   assert.equal(git(root,['rev-parse','--show-toplevel']).replaceAll('\\','/').toLowerCase(),root.replaceAll('\\','/').toLowerCase());
+});
+test('unattended scheduler runs independent tasks and holds repeated failure',async()=>{
+  const root=fixture(); let n=0;
+  const worker={ready:true,login:{state:'IDLE'},async propose(req){
+    if(req.task.includes('失敗')) throw Error('intentional test failure');
+    n++; return proposal(good.replace('r.durationMs', 'r.durationMs+'+n));
+  }};
+  const engine=new Engine(root,worker); await engine.startSession('安全な表示変更A\n意図的な失敗\n安全な表示変更B'); await engine.running;
+  const tasks=engine.tasks.slice(-3); assert.equal(tasks[0].status,'COMPLETED'); assert.equal(tasks[1].status,'HOLD'); assert.equal(tasks[2].status,'COMPLETED');
+  assert.equal(tasks[1].attempts.length,0); assert.equal(tasks[0].audit.source,'UNATTENDED'); assert.equal(tasks[0].audit.codexIntervention,false); assert.equal(tasks[1].audit.codexIntervention,false); assert(tasks[0].commit); assert.equal(tasks[1].commit,undefined); assert(tasks[2].commit);
+  for(const t of tasks) assert(fs.existsSync(path.join(root,'.runtime','audit',t.id+'.json')));
 });
 test('GUI HTTP accepts task and returns actual result; CSRF rejects foreign origin (TEST DOUBLE)',async()=>{
   const root=fixture();const {server,engine}=createServer(root,fake());await new Promise(r=>server.listen(0,'127.0.0.1',r));

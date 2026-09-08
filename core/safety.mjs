@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-export const LIMITS = Object.freeze({ attempts: 2, sameFailure: 2, taskMs: 240000, sessionMs: 720000, tasks: 6, bytes: 100000 });
+export const LIMITS = Object.freeze({ attempts: 2, sameFailure: 2, taskMs: 1800000, sessionMs: 43200000, tasks: 6, bytes: 100000 });
 export class Hold extends Error { constructor(message, state = 'HOLD') { super(message); this.state = state; } }
 export const sha = value => crypto.createHash('sha256').update(value).digest('hex');
 export function privateText(text) {

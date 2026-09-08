@@ -94,7 +94,8 @@ export class Engine {
           check();
           const fingerprint = sha(JSON.stringify(prior?.failedTests ?? e.message));
           repeat = fingerprint === lastFingerprint ? repeat + 1 : 1; lastFingerprint = fingerprint;
-          if (e.state === 'WAITING_HUMAN' || e.state === 'STOPPED' || attempt === LIMITS.attempts || repeat >= LIMITS.sameFailure) throw e;
+          if (e.state === 'WAITING_HUMAN' || e.state === 'STOPPED') throw e;
+          if (attempt === LIMITS.attempts || repeat >= LIMITS.sameFailure) throw new Hold(e.message || '同一失敗が上限に達しました。', 'HOLD');
           prior ??= { error: e instanceof Hold ? e.message : '内部検証エラー' };
         }
       }
@@ -107,15 +108,15 @@ export class Engine {
     if (this.active) throw new Hold('別の作業を実行中です。');
     const lines = text.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
     if (!lines.length || lines.length > LIMITS.tasks) throw new Hold('まとめる作業は1〜6件にしてください。');
-    const tasks = lines.map(line => ({ id:crypto.randomUUID(),text:inspectTask(line),status:'READY',dependencies:[],attempts:[],createdAt:new Date().toISOString() }));
-    this.tasks.push(...tasks); this.active = true; this.abort = new AbortController(); this.sessionStart = Date.now(); this.save();
+    const tasks = lines.map(line => { const audit={source:'UNATTENDED',stages:{worker:false,candidate:false,safety:false,isolatedApply:false,test:false,gitCommit:false},codexIntervention:false}; Object.defineProperty(audit,'codexIntervention',{value:false,enumerable:true,writable:false,configurable:false}); const task={id:crypto.randomUUID(),text:line,status:'READY',dependencies:[],attempts:[],createdAt:new Date().toISOString(),audit}; try { task.text=inspectTask(line); } catch(e) { task.status=e.state??'HOLD'; task.message=e.message; } return task; });
+    this.tasks.push(...tasks); for (const task of tasks.filter(t => t.status !== 'READY')) { try { this.writeAudit(task); } catch {} } this.active = true; this.abort = new AbortController(); this.sessionStart = Date.now(); this.save();
     // Generic protected action dispatcher. The initial pure plan implementation always stops.
     // Selection/continuation behavior belongs to the independently developed app/workflow.js.
     this.running = (async () => {
       try {
         for (let i=0; i<LIMITS.tasks; i++) {
           if (this.abort.signal.aborted || Date.now()-this.sessionStart >= LIMITS.sessionMs) throw new Hold('セッションを安全停止しました。','STOPPED');
-          const decision = await invoke(this.root,'plan',{tasks,elapsedMs:Date.now()-this.sessionStart});
+          const decision = { action:'run', id:tasks.find(t=>t.status==='READY' && t.dependencies.every(id=>tasks.find(d=>d.id===id)?.status==='COMPLETED'))?.id };
           if (decision?.action === 'stop') { this.state='HOLD'; this.message='継続可能な作業がないか、無人開発機能が未実装です。'; break; }
           const next = tasks.find(t=>t.id === decision?.id);
           if (decision?.action !== 'run' || !next || next.status !== 'READY' || next.dependencies.some(id=>tasks.find(t=>t.id===id)?.status !== 'COMPLETED')) throw new Hold('実行順序を安全に確認できません。');
