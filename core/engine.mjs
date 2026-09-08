@@ -91,6 +91,7 @@ export class Engine {
           task.result = typeof result === 'string' ? result : '作業が完了しました。';
           this.update(task, 'COMPLETED', 'TEST成功・Git記録まで完了しました。'); return;
         } catch (e) {
+          if (this.worker.diagnostic) task.audit.workerDiagnostic = this.worker.diagnostic;
           check();
           const fingerprint = sha(JSON.stringify(prior?.failedTests ?? e.message));
           repeat = fingerprint === lastFingerprint ? repeat + 1 : 1; lastFingerprint = fingerprint;

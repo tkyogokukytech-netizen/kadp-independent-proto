@@ -27,10 +27,11 @@ export function parseCliResponse(output) {
 }
 export class AntigravityWorker {
   constructor(root, executable = path.join(process.env.LOCALAPPDATA ?? '', 'agy', 'bin', 'agy.exe')) {
-    this.root = root; this.executable = executable; this.ready = false; this.codeSubmitted = false;
+    this.root = root; this.executable = executable; this.ready = false; this.codeSubmitted = false; this.diagnostic = null;
     this.login = { state: 'WAITING_HUMAN', message: 'Google OAuthの本人認証が必要です。' };
   }
   run(prompt, signal) {
+    this.diagnostic = { mode:'plan', outputFormat:'json', timeout:'180s', promptHash:sha(prompt), promptBytes:Buffer.byteLength(prompt) };
     if (privateText(prompt)) return Promise.reject(new Hold('送信前検査で秘密情報の可能性を検出しました。', 'WAITING_HUMAN'));
     return new Promise((resolve, reject) => {
       // Antigravity's official OAuth prompt reads from a TTY, not a redirected stdin pipe.
@@ -56,12 +57,14 @@ export class AntigravityWorker {
       child.onData(data => read(data, false));
       child.onExit(({ exitCode }) => {
         if (settled) return;
+        this.diagnostic = { ...this.diagnostic, stdoutBytes:Buffer.byteLength(out), stderrBytes:Buffer.byteLength(err), exitCode };
         if (exitCode !== 0) return finish(new Hold(this.login.url ? 'Google OAuthの本人操作を完了してください。' : 'Antigravity CLI接続に失敗しました。', 'WAITING_HUMAN'));
         try {
           const parsed = parseCliResponse(out); const response = parsed.response ?? parsed.text ?? parsed.result;
           if (typeof response !== 'string' || !response.trim()) throw Error();
+          this.diagnostic = { ...this.diagnostic, responseType:typeof response, responseBytes:Buffer.byteLength(response) };
           finish(null, { response, stats: parsed.stats ?? {} });
-        } catch { finish(new Hold('Antigravityの応答形式を確認できません。')); }
+        } catch { this.diagnostic = { ...this.diagnostic, holdReason:'invalid_response_format' }; finish(new Hold('Antigravityの応答形式を確認できません。')); }
       });
     });
   }
@@ -88,9 +91,9 @@ export class AntigravityWorker {
       '処理系はQuickJSでホストAPIなし。', JSON.stringify(request)
     ].join('\n');
     const result = await this.run(prompt, signal); let text = result.response.trim().replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
-    if (privateText(text)) throw new Hold('Worker出力に秘密情報の疑いがあります。');
-    let candidate; try { candidate = JSON.parse(text); } catch { throw new Hold('検査可能なCandidate JSONではありません。'); }
-    if (candidate.hold) throw new Hold('Workerが保留しました。', 'WAITING_HUMAN');
+    if (privateText(text)) { this.diagnostic = { ...this.diagnostic, holdReason:'private_text' }; throw new Hold('Worker出力に秘密情報の疑いがあります。'); }
+    let candidate; try { candidate = JSON.parse(text); } catch { this.diagnostic = { ...this.diagnostic, holdReason:'candidate_json_parse' }; throw new Hold('検査可能なCandidate JSONではありません。'); }
+    if (candidate.hold) { this.diagnostic = { ...this.diagnostic, holdReason:'worker_requested_hold' }; throw new Hold('Workerが保留しました。', 'WAITING_HUMAN'); }
     return { candidate, evidence:{worker:ANTIGRAVITY_WORKER_ID, promptHash:sha(prompt), responseHash:sha(text), stats:result.stats} };
   }
 }
