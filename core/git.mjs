@@ -7,7 +7,7 @@ export function git(root, args) {
   const env = {};
   for (const name of ['PATH', 'SystemRoot', 'WINDIR', 'TEMP', 'TMP']) if (process.env[name]) env[name] = process.env[name];
   Object.assign(env, { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null', GIT_TERMINAL_PROMPT: '0' });
-  return execFileSync('git', ['-c', 'core.hooksPath=' + path.join(root, '.runtime/no-hooks'), '-c', 'commit.gpgsign=false', '-c', 'user.name=KADP Independent Proto', '-c', 'user.email=proto@localhost', ...args], { cwd: root, env, windowsHide: true, encoding: 'utf8', timeout: 15000, maxBuffer: 1024 * 1024 }).trim();
+  return execFileSync('git', ['-c', 'safe.directory=' + path.resolve(root), '-c', 'core.hooksPath=' + path.join(root, '.runtime/no-hooks'), '-c', 'commit.gpgsign=false', '-c', 'user.name=KADP Independent Proto', '-c', 'user.email=proto@localhost', ...args], { cwd: root, env, windowsHide: true, encoding: 'utf8', timeout: 15000, maxBuffer: 1024 * 1024 }).trim();
 }
 export function clean(root) { if (git(root, ['status', '--porcelain'])) throw new Hold('保存前の変更があります。上書きを防ぐため停止しました。', 'WAITING_HUMAN'); }
 export function isolate(root, id, base) {

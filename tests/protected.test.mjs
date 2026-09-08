@@ -87,6 +87,10 @@ test('provider failure is surfaced without raw URLs or secrets',()=>{
   const safe=raw.replace(/https?:\/\/[^\s]+/g,'[リンク]').replace(/token=\S+/g,'token=[伏字]');
   assert(safe.includes('IneligibleTierError'));assert(!safe.includes('https://'));assert(!safe.includes('AIza'+'A'.repeat(30)));
 });
+test('Git operations scope safe.directory to the target repository',()=>{
+  const root=fixture();
+  assert.equal(git(root,['rev-parse','--show-toplevel']).replaceAll('\\','/').toLowerCase(),root.replaceAll('\\','/').toLowerCase());
+});
 test('GUI HTTP accepts task and returns actual result; CSRF rejects foreign origin (TEST DOUBLE)',async()=>{
   const root=fixture();const {server,engine}=createServer(root,fake());await new Promise(r=>server.listen(0,'127.0.0.1',r));
   const base='http://127.0.0.1:'+server.address().port;
