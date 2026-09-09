@@ -1,0 +1,35 @@
+[
+  {
+    "fn": "plan",
+    "input": {
+      "tasks": [
+        { "id": "task-1", "status": "READY", "dependencies": [] }
+      ],
+      "elapsedMs": -1
+    },
+    "op": "equals",
+    "expected": { "action": "stop" }
+  },
+  {
+    "fn": "plan",
+    "input": {
+      "tasks": [
+        { "id": "task-1", "status": "READY", "dependencies": [] }
+      ],
+      "elapsedMs": "invalid"
+    },
+    "op": "equals",
+    "expected": { "action": "stop" }
+  },
+  {
+    "fn": "plan",
+    "input": {
+      "tasks": [
+        { "id": "task-1", "status": "READY", "dependencies": [] }
+      ],
+      "elapsedMs": null
+    },
+    "op": "equals",
+    "expected": { "action": "stop" }
+  }
+]

@@ -2,6 +2,11 @@
 // plan receives { tasks: [{id, text, status, dependencies}], elapsedMs }.
 // It may only propose the next task. The protected host rechecks the result.
 function plan(session) {
+  const elapsedMs = session?.elapsedMs;
+  if (typeof elapsedMs !== 'number' || !Number.isFinite(elapsedMs) || elapsedMs < 0) {
+    return { action: 'stop' };
+  }
+
   const tasks = Array.isArray(session?.tasks) ? session.tasks : [];
 
   const next = tasks.find(task =>

@@ -1,0 +1,80 @@
+{
+  "id": "d5c98e4d-32d1-443e-adb9-c91059bf6e66-1",
+  "baseline": "b4b73206b9fd0f47f932f66385c9326c7983733f",
+  "task": "自己開発: workflow.jsで、elapsedMsが負数または不正な値の場合は安全にstopを返すよう改善し、その動作を確認する新しい受入TESTも追加して。",
+  "at": "2026-09-09T02:21:06.163Z",
+  "worker": {
+    "worker": "official-antigravity-cli",
+    "promptHash": "58ea2d8f307753f6f60a54f6d761c5bb064de8fc1cca7622540beed6bb08fff9",
+    "responseHash": "85c81b2111f4d402a30f7ec58dcdac0899db38b773d54f92df6f7c03bcb89f68",
+    "stats": {}
+  },
+  "candidate": {
+    "summary": "workflow.jsにおいてelapsedMsが負数または不正な値の場合に安全にstopを返すようガード処理を追加し、その動作を確認する新規受入テストcases/workflow.jsonを追加しました。",
+    "files": [
+      {
+        "path": "app/workflow.js",
+        "content": "// Unprivileged task-selection logic.\n// plan receives { tasks: [{id, text, status, dependencies}], elapsedMs }.\n// It may only propose the next task. The protected host rechecks the result.\nfunction plan(session) {\n  const elapsedMs = session?.elapsedMs;\n  if (typeof elapsedMs !== 'number' || !Number.isFinite(elapsedMs) || elapsedMs < 0) {\n    return { action: 'stop' };\n  }\n\n  const tasks = Array.isArray(session?.tasks) ? session.tasks : [];\n\n  const next = tasks.find(task =>\n    task.status === 'READY' &&\n    Array.isArray(task.dependencies) &&\n    task.dependencies.every(id =>\n      tasks.find(dep => dep.id === id)?.status === 'COMPLETED'\n    )\n  );\n\n  return next\n    ? { action: 'run', id: next.id }\n    : { action: 'stop' };\n}\n"
+      },
+      {
+        "path": "cases/workflow.json",
+        "content": "[\n  {\n    \"fn\": \"plan\",\n    \"input\": {\n      \"tasks\": [\n        { \"id\": \"task-1\", \"status\": \"READY\", \"dependencies\": [] }\n      ],\n      \"elapsedMs\": -1\n    },\n    \"op\": \"equals\",\n    \"expected\": { \"action\": \"stop\" }\n  },\n  {\n    \"fn\": \"plan\",\n    \"input\": {\n      \"tasks\": [\n        { \"id\": \"task-1\", \"status\": \"READY\", \"dependencies\": [] }\n      ],\n      \"elapsedMs\": \"invalid\"\n    },\n    \"op\": \"equals\",\n    \"expected\": { \"action\": \"stop\" }\n  },\n  {\n    \"fn\": \"plan\",\n    \"input\": {\n      \"tasks\": [\n        { \"id\": \"task-1\", \"status\": \"READY\", \"dependencies\": [] }\n      ],\n      \"elapsedMs\": null\n    },\n    \"op\": \"equals\",\n    \"expected\": { \"action\": \"stop\" }\n  }\n]\n"
+      }
+    ]
+  },
+  "tests": {
+    "pass": true,
+    "results": [
+      {
+        "name": "result-success",
+        "pass": true
+      },
+      {
+        "name": "result-failure",
+        "pass": true
+      },
+      {
+        "name": "planner-empty",
+        "pass": true
+      },
+      {
+        "name": "anothercase.json:0",
+        "pass": true
+      },
+      {
+        "name": "baseline.json:0",
+        "pass": true
+      },
+      {
+        "name": "baseline.json:1",
+        "pass": true
+      },
+      {
+        "name": "duration.json:0",
+        "pass": true
+      },
+      {
+        "name": "duration.json:1",
+        "pass": true
+      },
+      {
+        "name": "newcase.json:0",
+        "pass": true
+      },
+      {
+        "name": "workflow.json:0",
+        "pass": true
+      },
+      {
+        "name": "workflow.json:1",
+        "pass": true
+      },
+      {
+        "name": "workflow.json:2",
+        "pass": true
+      }
+    ]
+  },
+  "candidateHash": "b6a0fe6bdaf4bc8b52f7145529014abedc1cef9100654a65934161a6196dd520",
+  "status": "TESTED"
+}
