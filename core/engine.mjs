@@ -180,7 +180,8 @@ export class Engine {
           task.summary = output.candidate.summary;
           task.durationMs = Date.now() - started;
 
-          if (task.kind === TASK_TYPES.SELF_DEVELOPMENT_CHANGE) {
+          const requiresHumanApproval = task.kind === TASK_TYPES.SELF_DEVELOPMENT_CHANGE || task.audit.source === 'GUI';
+          if (requiresHumanApproval) {
             task.review = this.buildReview(folder, changes, contextPaths, tests);
             task.pendingApproval = {
               folder,
