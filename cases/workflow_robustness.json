@@ -1,0 +1,49 @@
+[
+  {
+    "fn": "plan",
+    "input": {
+      "tasks": [
+        null,
+        123,
+        "invalid",
+        {},
+        { "id": "", "status": "READY", "dependencies": [] },
+        { "id": "   ", "status": "READY", "dependencies": [] },
+        { "id": "task-valid", "status": "READY", "dependencies": [] }
+      ],
+      "elapsedMs": 100
+    },
+    "op": "equals",
+    "expected": { "action": "run", "id": "task-valid" }
+  },
+  {
+    "fn": "plan",
+    "input": {
+      "tasks": [
+        null,
+        { "id": "task-dep", "status": "COMPLETED", "dependencies": [] },
+        null,
+        { "id": "", "status": "READY", "dependencies": [] },
+        { "id": "task-main", "status": "READY", "dependencies": ["task-dep"] }
+      ],
+      "elapsedMs": 200
+    },
+    "op": "equals",
+    "expected": { "action": "run", "id": "task-main" }
+  },
+  {
+    "fn": "plan",
+    "input": {
+      "tasks": [
+        null,
+        456,
+        "bad",
+        { "id": "", "status": "READY", "dependencies": [] },
+        { "status": "READY", "dependencies": [] }
+      ],
+      "elapsedMs": 300
+    },
+    "op": "equals",
+    "expected": { "action": "stop" }
+  }
+]

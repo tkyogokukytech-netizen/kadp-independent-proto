@@ -1,0 +1,92 @@
+{
+  "id": "d9fec8f8-b5b8-45b0-9a0c-9ab61ffbf1fa-1",
+  "baseline": "dc343be26186fb10188387a16597e2b227e0ecc6",
+  "task": "自己開発: workflow.jsで、tasks配列にnull・不正な要素・空のidを持つタスクが含まれていても例外を起こさず、安全に有効なREADYタスクだけを選択できるよう改善してください。その変更を直接確認できる新しい受入TESTも追加してください。",
+  "at": "2026-09-09T03:02:07.724Z",
+  "worker": {
+    "worker": "official-antigravity-cli",
+    "promptHash": "d8b4d374676d573efa153764f2a4a5473b6b196b366b9f15cd91394c08ce689e",
+    "responseHash": "1c9d2c8109af090a313752cee3094399dd88c14214353504505c6c80b3716725",
+    "stats": {}
+  },
+  "candidate": {
+    "summary": "workflow.jsにお いて、tasks配列にnullや不正な要素、空のidを持つタスクが含まれていても例外を起こさずに安全に有効なREADYタスクを選択できるよう検証処理を追加し、その挙動を直接確認する新しい受入テストケースを追加しました。",
+    "files": [
+      {
+        "path": "app/workflow.js",
+        "content": "// Unprivileged task-selection logic.\n// plan receives { tasks: [{id, text, status, dependencies}], elapsedMs }.\n// It may only propose the next task. The protected host rechecks the result.\nfunction plan(session) {\n  const elapsedMs = session?.elapsedMs;\n  if (typeof elapsedMs !== 'number' || !Number.isFinite(elapsedMs) || elapsedMs < 0) {\n    return { action: 'stop' };\n  }\n\n  const tasks = Array.isArray(session?.tasks) ? session.tasks : [];\n\n  const next = tasks.find(task =>\n    Boolean(task) &&\n    typeof task === 'object' &&\n    typeof task.id === 'string' &&\n    task.id.trim() !== '' &&\n    task.status === 'READY' &&\n    Array.isArray(task.dependencies) &&\n    task.dependencies.every(id =>\n      tasks.find(dep => Boolean(dep) && typeof dep === 'object' && dep.id === id)?.status === 'COMPLETED'\n    )\n  );\n\n  return next\n    ? { action: 'run', id: next.id }\n    : { action: 'stop' };\n}\n"
+      },
+      {
+        "path": "cases/workflow_robustness.json",
+        "content": "[\n  {\n    \"fn\": \"plan\",\n    \"input\": {\n      \"tasks\": [\n        null,\n        123,\n        \"invalid\",\n        {},\n        { \"id\": \"\", \"status\": \"READY\", \"dependencies\": [] },\n        { \"id\": \"   \", \"status\": \"READY\", \"dependencies\": [] },\n        { \"id\": \"task-valid\", \"status\": \"READY\", \"dependencies\": [] }\n      ],\n      \"elapsedMs\": 100\n    },\n    \"op\": \"equals\",\n    \"expected\": { \"action\": \"run\", \"id\": \"task-valid\" }\n  },\n  {\n    \"fn\": \"plan\",\n    \"input\": {\n      \"tasks\": [\n        null,\n        { \"id\": \"task-dep\", \"status\": \"COMPLETED\", \"dependencies\": [] },\n        null,\n        { \"id\": \"\", \"status\": \"READY\", \"dependencies\": [] },\n        { \"id\": \"task-main\", \"status\": \"READY\", \"dependencies\": [\"task-dep\"] }\n      ],\n      \"elapsedMs\": 200\n    },\n    \"op\": \"equals\",\n    \"expected\": { \"action\": \"run\", \"id\": \"task-main\" }\n  },\n  {\n    \"fn\": \"plan\",\n    \"input\": {\n      \"tasks\": [\n        null,\n        456,\n        \"bad\",\n        { \"id\": \"\", \"status\": \"READY\", \"dependencies\": [] },\n        { \"status\": \"READY\", \"dependencies\": [] }\n      ],\n      \"elapsedMs\": 300\n    },\n    \"op\": \"equals\",\n    \"expected\": { \"action\": \"stop\" }\n  }\n]\n"
+      }
+    ]
+  },
+  "tests": {
+    "pass": true,
+    "results": [
+      {
+        "name": "result-success",
+        "pass": true
+      },
+      {
+        "name": "result-failure",
+        "pass": true
+      },
+      {
+        "name": "planner-empty",
+        "pass": true
+      },
+      {
+        "name": "anothercase.json:0",
+        "pass": true
+      },
+      {
+        "name": "baseline.json:0",
+        "pass": true
+      },
+      {
+        "name": "baseline.json:1",
+        "pass": true
+      },
+      {
+        "name": "duration.json:0",
+        "pass": true
+      },
+      {
+        "name": "duration.json:1",
+        "pass": true
+      },
+      {
+        "name": "newcase.json:0",
+        "pass": true
+      },
+      {
+        "name": "workflow.json:0",
+        "pass": true
+      },
+      {
+        "name": "workflow.json:1",
+        "pass": true
+      },
+      {
+        "name": "workflow.json:2",
+        "pass": true
+      },
+      {
+        "name": "workflow_robustness.json:0",
+        "pass": true
+      },
+      {
+        "name": "workflow_robustness.json:1",
+        "pass": true
+      },
+      {
+        "name": "workflow_robustness.json:2",
+        "pass": true
+      }
+    ]
+  },
+  "candidateHash": "1c9d2c8109af090a313752cee3094399dd88c14214353504505c6c80b3716725",
+  "status": "TESTED"
+}

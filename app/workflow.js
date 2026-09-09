@@ -10,10 +10,14 @@ function plan(session) {
   const tasks = Array.isArray(session?.tasks) ? session.tasks : [];
 
   const next = tasks.find(task =>
+    Boolean(task) &&
+    typeof task === 'object' &&
+    typeof task.id === 'string' &&
+    task.id.trim() !== '' &&
     task.status === 'READY' &&
     Array.isArray(task.dependencies) &&
     task.dependencies.every(id =>
-      tasks.find(dep => dep.id === id)?.status === 'COMPLETED'
+      tasks.find(dep => Boolean(dep) && typeof dep === 'object' && dep.id === id)?.status === 'COMPLETED'
     )
   );
 
