@@ -201,7 +201,16 @@ export class Engine {
       try {
         for (let i=0; i<LIMITS.tasks; i++) {
           if (this.abort.signal.aborted || Date.now()-this.sessionStart >= LIMITS.sessionMs) throw new Hold('セッションを安全停止しました。','STOPPED');
-          const decision = { action:'run', id:tasks.find(t=>t.status==='READY' && t.dependencies.every(id=>tasks.find(d=>d.id===id)?.status==='COMPLETED'))?.id };
+          const planningInput = {
+            tasks: tasks.map(t => ({
+              id: t.id,
+              text: t.text,
+              status: t.status,
+              dependencies: t.dependencies
+            })),
+            elapsedMs: Date.now() - this.sessionStart
+          };
+          const decision = await invoke(this.root, 'plan', planningInput);
           if (decision?.action === 'stop') { this.state='HOLD'; this.message='継続可能な作業がないか、無人開発機能が未実装です。'; break; }
           const next = tasks.find(t=>t.id === decision?.id);
           if (decision?.action !== 'run' || !next || next.status !== 'READY' || next.dependencies.some(id=>tasks.find(t=>t.id===id)?.status !== 'COMPLETED')) throw new Hold('実行順序を安全に確認できません。');
