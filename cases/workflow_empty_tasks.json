@@ -1,0 +1,20 @@
+[
+  {
+    "fn": "plan",
+    "input": {
+      "tasks": [],
+      "elapsedMs": 0
+    },
+    "op": "equals",
+    "expected": { "action": "stop" }
+  },
+  {
+    "fn": "plan",
+    "input": {
+      "tasks": [],
+      "elapsedMs": 100
+    },
+    "op": "equals",
+    "expected": { "action": "stop" }
+  }
+]

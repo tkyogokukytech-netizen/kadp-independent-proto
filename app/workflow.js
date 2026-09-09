@@ -8,6 +8,9 @@ function plan(session) {
   }
 
   const tasks = Array.isArray(session?.tasks) ? session.tasks : [];
+  if (tasks.length === 0) {
+    return { action: 'stop' };
+  }
 
   const next = tasks.find(task =>
     Boolean(task) &&

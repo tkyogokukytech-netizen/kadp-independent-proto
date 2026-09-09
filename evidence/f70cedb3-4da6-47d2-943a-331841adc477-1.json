@@ -1,0 +1,100 @@
+{
+  "id": "f70cedb3-4da6-47d2-943a-331841adc477-1",
+  "baseline": "5df478c99c47f86a67829f4c45ff10e664df9832",
+  "task": "自己開発: workflow.jsで、tasks配列が空の場合に安全にstopを返す処理を明示し、その動作を直接確認できる新しい受入TESTを追加してください。",
+  "at": "2026-09-09T03:49:50.006Z",
+  "worker": {
+    "worker": "official-antigravity-cli",
+    "promptHash": "e265bf04771514e49242c25a23eb990b3756f3d6e94d09a75bb83ec335e23a45",
+    "responseHash": "a3566e99de05733699806e4b5514ed3854440a79cff01d16f31df66546935580",
+    "stats": {}
+  },
+  "candidate": {
+    "summary": "workflow.jsにおいてtasks配列が空の場合に安全にstopを返す処理を明示し、その動作を直接確認できる新しい受入テスト cases/workflow_empty_tasks.json を追加しました。",
+    "files": [
+      {
+        "path": "app/workflow.js",
+        "content": "// Unprivileged task-selection logic.\n// plan receives { tasks: [{id, text, status, dependencies}], elapsedMs }.\n// It may only propose the next task. The protected host rechecks the result.\nfunction plan(session) {\n  const elapsedMs = session?.elapsedMs;\n  if (typeof elapsedMs !== 'number' || !Number.isFinite(elapsedMs) || elapsedMs < 0) {\n    return { action: 'stop' };\n  }\n\n  const tasks = Array.isArray(session?.tasks) ? session.tasks : [];\n  if (tasks.length === 0) {\n    return { action: 'stop' };\n  }\n\n  const next = tasks.find(task =>\n    Boolean(task) &&\n    typeof task === 'object' &&\n    typeof task.id === 'string' &&\n    task.id.trim() !== '' &&\n    task.status === 'READY' &&\n    Array.isArray(task.dependencies) &&\n    task.dependencies.every(id =>\n      tasks.find(dep => Boolean(dep) && typeof dep === 'object' && dep.id === id)?.status === 'COMPLETED'\n    )\n  );\n\n  return next\n    ? { action: 'run', id: next.id }\n    : { action: 'stop' };\n}\n"
+      },
+      {
+        "path": "cases/workflow_empty_tasks.json",
+        "content": "[\n  {\n    \"fn\": \"plan\",\n    \"input\": {\n      \"tasks\": [],\n      \"elapsedMs\": 0\n    },\n    \"op\": \"equals\",\n    \"expected\": { \"action\": \"stop\" }\n  },\n  {\n    \"fn\": \"plan\",\n    \"input\": {\n      \"tasks\": [],\n      \"elapsedMs\": 100\n    },\n    \"op\": \"equals\",\n    \"expected\": { \"action\": \"stop\" }\n  }\n]\n"
+      }
+    ]
+  },
+  "tests": {
+    "pass": true,
+    "results": [
+      {
+        "name": "result-success",
+        "pass": true
+      },
+      {
+        "name": "result-failure",
+        "pass": true
+      },
+      {
+        "name": "planner-empty",
+        "pass": true
+      },
+      {
+        "name": "anothercase.json:0",
+        "pass": true
+      },
+      {
+        "name": "baseline.json:0",
+        "pass": true
+      },
+      {
+        "name": "baseline.json:1",
+        "pass": true
+      },
+      {
+        "name": "duration.json:0",
+        "pass": true
+      },
+      {
+        "name": "duration.json:1",
+        "pass": true
+      },
+      {
+        "name": "newcase.json:0",
+        "pass": true
+      },
+      {
+        "name": "workflow.json:0",
+        "pass": true
+      },
+      {
+        "name": "workflow.json:1",
+        "pass": true
+      },
+      {
+        "name": "workflow.json:2",
+        "pass": true
+      },
+      {
+        "name": "workflow_empty_tasks.json:0",
+        "pass": true
+      },
+      {
+        "name": "workflow_empty_tasks.json:1",
+        "pass": true
+      },
+      {
+        "name": "workflow_robustness.json:0",
+        "pass": true
+      },
+      {
+        "name": "workflow_robustness.json:1",
+        "pass": true
+      },
+      {
+        "name": "workflow_robustness.json:2",
+        "pass": true
+      }
+    ]
+  },
+  "candidateHash": "ec265db608f2155f48602f0553f6ea6e8fb191d1264d1d493119c375e3a3c896",
+  "status": "TESTED"
+}
