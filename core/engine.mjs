@@ -129,7 +129,7 @@ export class Engine {
     try {
       release = acquireLock(this.root); check(); clean(this.root);
       const baseline = git(this.root, ['rev-parse', 'HEAD']); task.baseline = baseline;
-      const contextPaths = git(this.root, ['ls-files', 'app', 'cases']).split(/\r?\n/).filter(Boolean);
+      const contextPaths = git(this.root, ['ls-files', 'app', 'cases', 'KADP_MASTER_SPEC.md']).split(/\r?\n/).filter(Boolean);
       const context = contextPaths.map(p => ({ path:p, content:fs.readFileSync(safePath(this.root,p),'utf8') }));
       if (privateText(JSON.stringify(context))) throw new Hold('コードに秘密情報の疑いがあるため送信しません。');
       for (let attempt = 1; attempt <= LIMITS.attempts; attempt++) { task.retryCount = attempt;
