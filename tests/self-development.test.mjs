@@ -34,9 +34,21 @@ test('GUI SELF_DEVELOPMENT_CHANGE reaches TEST and dangerous self-change is reje
     const state = await (await fetch(`${base}/api/state`)).json();
     const task = state.tasks.find(t => t.id === safe.id);
     assert.equal(task.kind, 'SELF_DEVELOPMENT_CHANGE');
-    assert.equal(task.status, 'COMPLETED');
+    assert.equal(task.status, 'WAITING_HUMAN');
     assert.equal(task.tests.pass, true);
-    assert(task.commit);
+    assert.equal(task.commit, undefined);
+    assert(task.pendingApproval);
+
+    await fetch(`${base}/api/decision`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ ok: true })
+    });
+
+    const approved = (await (await fetch(`${base}/api/state`)).json()).tasks.find(t => t.id === safe.id);
+    assert.equal(approved.status, 'COMPLETED');
+    assert(approved.commit);
+    assert.equal(approved.pendingApproval, undefined);
     const dangerous = await (await fetch(`${base}/api/task`, { method: 'POST', headers, body: JSON.stringify({ kind: 'SELF_DEVELOPMENT_CHANGE', text: 'SELF_DEVELOPMENT_CHANGE: change core/safety.mjs' }) })).json();
     const after = (await (await fetch(`${base}/api/state`)).json()).tasks.find(t => t.id === dangerous.id);
     assert.equal(after.status, 'WAITING_HUMAN');

@@ -33,10 +33,77 @@ export class Engine {
   update(task, state, message) { task.status = state; task.message = message; this.state = state; this.message = message; this.save(); }
   stop() { this.abort?.abort(); this.state = 'STOPPED'; this.message = '安全停止しました。新しい変更を反映しません。'; this.save(); }
   decide(ok) {
-    if (this.active) throw new Hold('実行中は確認操作を行えません。');
+    if (this.active) throw new Hold('A task is still running.');
+
+    const task = [...this.tasks].reverse().find(t =>
+      t.status === 'WAITING_HUMAN' && t.pendingApproval
+    );
+
+    if (task) {
+      const pending = task.pendingApproval;
+
+      if (!ok) {
+        const decision = {
+          taskId: task.id,
+          decision: 'NG',
+          commit: null,
+          candidateHash: pending.record.candidateHash,
+          at: new Date().toISOString()
+        };
+        const encoded = JSON.stringify(decision, null, 2) + '\n';
+        fs.writeFileSync(
+          safePath(this.root, '.runtime/audit/' + task.id + '-decision.json'),
+          encoded,
+          { flag: 'wx' }
+        );
+        task.decisionAuditHash = sha(encoded);
+        delete task.pendingApproval;
+        this.update(task, 'HOLD', 'Human rejected the tested Candidate. No commit was created.');
+        return;
+      }
+
+      const check = () => {
+        if (this.active) throw new Hold('Another task is running.');
+      };
+
+      const commit = promote(
+        this.root,
+        pending.folder,
+        pending.baseline,
+        pending.paths,
+        pending.record,
+        check
+      );
+
+      task.audit.stages.gitCommit = true;
+      task.commit = commit;
+
+      const decision = {
+        taskId: task.id,
+        decision: 'OK',
+        commit,
+        candidateHash: pending.record.candidateHash,
+        at: new Date().toISOString()
+      };
+      const encoded = JSON.stringify(decision, null, 2) + '\n';
+      fs.writeFileSync(
+        safePath(this.root, '.runtime/audit/' + task.id + '-decision.json'),
+        encoded,
+        { flag: 'wx' }
+      );
+      task.decisionAuditHash = sha(encoded);
+
+      delete task.pendingApproval;
+      this.update(task, 'COMPLETED', 'Human approved the tested Candidate. The same Candidate was committed.');
+      return;
+    }
+
     if (!ok) { this.stop(); return; }
-    // Acknowledgement only: never grants extra authority or retries a blocked task.
-    this.state = 'IDLE'; this.message = '確認を受け取りました。必要なら範囲を絞って新しく依頼してください。'; this.save();
+
+    // Existing acknowledgement behavior for blocked/non-approval tasks.
+    this.state = 'IDLE';
+    this.message = 'Acknowledged. No additional authority was granted.';
+    this.save();
   }
   accept(text, meta = {}) {
     if (this.active) throw new Hold('別の作業を実行中です。完了を待つかSTOPしてください。');
@@ -85,8 +152,24 @@ export class Engine {
           fs.writeFileSync(safePath(this.root, '.runtime/evidence/' + id + '.json'), JSON.stringify(record, null, 2));
           task.attempts.push({ attempt, tests, worker: output.evidence, candidateHash: record.candidateHash }); this.save();
           if (!tests.pass) { prior = { failedTests: tests.results.filter(t=>!t.pass), previousCandidate: output.candidate }; throw new Hold('TESTが失敗しました。安定版には反映しません。'); }
+          task.tests = tests;
+          task.changes = changes.map(f=>f.path);
+          task.summary = output.candidate.summary;
+          task.durationMs = Date.now() - started;
+
+          if (task.kind === TASK_TYPES.SELF_DEVELOPMENT_CHANGE) {
+            task.pendingApproval = {
+              folder,
+              baseline,
+              paths: task.changes,
+              record
+            };
+            this.update(task, 'WAITING_HUMAN', 'TEST PASS. Human approval is required before Git commit.');
+            return;
+          }
+
           check(); const commit = promote(this.root, folder, baseline, changes.map(f=>f.path), record, check); task.audit.stages.gitCommit = true;
-          task.commit = commit; task.tests = tests; task.changes = changes.map(f=>f.path); task.summary = output.candidate.summary; task.durationMs = Date.now() - started;
+          task.commit = commit;
           let result = '作業が完了しました。';
           try { result = await invoke(this.root, 'formatResult', { ok:true, durationMs:task.durationMs }); } catch { /* trusted factual completion remains available */ }
           task.result = typeof result === 'string' ? result : '作業が完了しました。';
