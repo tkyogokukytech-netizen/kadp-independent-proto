@@ -30,6 +30,29 @@ export class Engine {
     task.auditHash = sha(encoded);
   }
   view() { return { state: this.state, label: LABELS[this.state], message: this.message, active: this.active, tasks: this.tasks, workerReady: this.worker.ready, login: this.worker.login }; }
+  buildReview(folder, changes, contextPaths, tests) {
+    const tracked = new Set(contextPaths);
+    const files = changes.map(change => {
+      let diff;
+      if (tracked.has(change.path)) {
+        diff = git(folder, ['diff', '--no-ext-diff', '--unified=3', '--', change.path]);
+      } else {
+        const lines = change.content.replace(/\r\n/g, '\n').split('\n');
+        if (lines.at(-1) === '') lines.pop();
+        diff = [
+          'diff --git a/' + change.path + ' b/' + change.path,
+          'new file',
+          '--- /dev/null',
+          '+++ b/' + change.path,
+          '@@ -0,0 +1,' + lines.length + ' @@',
+          ...lines.map(line => '+' + line)
+        ].join('\n');
+      }
+      return { path: change.path, kind: tracked.has(change.path) ? '変更' : '新規', diff };
+    });
+    const results = Array.isArray(tests?.results) ? tests.results.map(r => ({ name: r.name, pass: Boolean(r.pass) })) : [];
+    return { files, tests: { pass: Boolean(tests?.pass), total: results.length, passed: results.filter(r => r.pass).length, failed: results.filter(r => !r.pass).length, results } };
+  }
   update(task, state, message) { task.status = state; task.message = message; this.state = state; this.message = message; this.save(); }
   stop() { this.abort?.abort(); this.state = 'STOPPED'; this.message = '安全停止しました。新しい変更を反映しません。'; this.save(); }
   decide(ok) {
@@ -158,6 +181,7 @@ export class Engine {
           task.durationMs = Date.now() - started;
 
           if (task.kind === TASK_TYPES.SELF_DEVELOPMENT_CHANGE) {
+            task.review = this.buildReview(folder, changes, contextPaths, tests);
             task.pendingApproval = {
               folder,
               baseline,

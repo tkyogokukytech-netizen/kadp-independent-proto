@@ -38,6 +38,13 @@ test('GUI SELF_DEVELOPMENT_CHANGE reaches TEST and dangerous self-change is reje
     assert.equal(task.tests.pass, true);
     assert.equal(task.commit, undefined);
     assert(task.pendingApproval);
+    assert(task.review);
+    assert.equal(task.review.tests.pass, true);
+    assert(task.review.tests.total > 0);
+    assert.equal(task.review.files.length, 1);
+    assert.equal(task.review.files[0].path, 'app/self-development-e2e.js');
+    assert.equal(task.review.files[0].kind, '新規');
+    assert(task.review.files[0].diff.includes('+function selfDevelopmentProbe'));
 
     await fetch(`${base}/api/decision`, {
       method: 'POST',

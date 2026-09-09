@@ -6,6 +6,21 @@ async function send(url,body={}) {
   catch(e){$('error').textContent=e.message; await refresh(); return false;}
 }
 function paragraph(text,cls){const p=document.createElement('p');p.textContent=text;if(cls)p.className=cls;return p;}
+
+function renderReview(review){
+  const box=$('review');box.replaceChildren();box.hidden=!review;if(!review)return;
+  const heading=document.createElement('h3');heading.textContent='この画面だけで確認できます';box.append(heading);
+  const tests=review.tests;box.append(paragraph(`TEST：${tests.pass?'成功':'失敗'} · ${tests.passed}/${tests.total} PASS`,'review-test'));
+  const testDetail=document.createElement('details');const testSummary=document.createElement('summary');testSummary.textContent='TEST結果を見る';testDetail.append(testSummary);
+  for(const result of tests.results)testDetail.append(paragraph(`${result.pass?'✓':'×'} ${result.name}`,result.pass?'test-pass':'test-fail'));
+  box.append(testDetail);
+  for(const file of review.files){
+    const detail=document.createElement('details');detail.className='review-file';
+    const summary=document.createElement('summary');summary.textContent=`${file.kind} · ${file.path}`;
+    const pre=document.createElement('pre');pre.className='diff';pre.textContent=file.diff||'差分はありません。';
+    detail.append(summary,pre);box.append(detail);
+  }
+}
 async function refresh(){
   try {
     const r=await fetch('/api/state');if(!r.ok)throw Error();const s=await r.json();csrf=s.csrf;
@@ -15,6 +30,7 @@ async function refresh(){
     $('login-link').hidden=!s.login.url;if(s.login.url)$('login-link').href=s.login.url;
     $('auth-box').hidden=!s.login.url;
     $('approval').hidden=!['WAITING_HUMAN','HOLD','ERROR'].includes(s.state);
+    const reviewTask=[...s.tasks].reverse().find(t=>t.status==='WAITING_HUMAN'&&t.review);renderReview(reviewTask?.review);
     $('history').replaceChildren();
     for(const t of s.tasks.slice(-12)){
       const card=document.createElement('article');card.className='card result';card.append(paragraph(t.text||'安全確認が必要な作業','request'));
