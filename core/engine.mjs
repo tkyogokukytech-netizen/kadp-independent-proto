@@ -4,6 +4,7 @@ import { Hold, LIMITS, TASK_TYPES, inspectTask, safePath, acquireLock, validateC
 import { git, clean, isolate, promote } from './git.mjs';
 import { validateApp } from './validation.mjs';
 import { invoke } from './sandbox.mjs';
+import { independentlyAudit } from './independent-audit.mjs';
 
 export const LABELS = { IDLE:'待機中', ACCEPTED:'作業受付', RUNNING:'作業中', WORKER_RUNNING:'Worker処理中', TESTING:'TEST中', COMPLETED:'完了', WAITING_HUMAN:'確認待ち', HOLD:'HOLD', STOPPED:'安全停止', ERROR:'エラー' };
 export class Engine {
@@ -28,8 +29,37 @@ export class Engine {
     fs.mkdirSync(safePath(this.root, '.runtime/audit'), { recursive: true });
     fs.writeFileSync(safePath(this.root, '.runtime/audit/' + task.id + '.json'), encoded, { flag: 'wx' });
     task.auditHash = sha(encoded);
+    this.writeLedger(task);
+  }
+  writeLedger(task) {
+    if (task.ledgerRecorded) return;
+    const entry = {
+      id: task.id,
+      at: new Date().toISOString(),
+      request: task.text,
+      status: task.status,
+      outcome: task.status === 'COMPLETED' ? '戦果' : task.status === 'HOLD' || task.status === 'STOPPED' ? '保留・停止' : '未完了',
+      summary: task.summary ?? null,
+      changedFiles: task.changes ?? [],
+      tests: task.tests ? { pass: Boolean(task.tests.pass), passed: task.tests.passed ?? 0, total: task.tests.total ?? 0 } : null,
+      independentAudit: task.independentAudit ? { passed: Boolean(task.independentAudit.passed), decision: task.independentAudit.decision } : null,
+      baseline: task.baseline ?? null,
+      commit: task.commit ?? null,
+      durationMs: task.durationMs ?? null,
+      attempts: task.attempts?.length ?? 0
+    };
+    fs.mkdirSync(safePath(this.root, '.runtime'), { recursive: true });
+    fs.appendFileSync(safePath(this.root, '.runtime/ledger.jsonl'), JSON.stringify(entry) + '\n');
+    task.ledgerRecorded = true;
   }
   view() { return { state: this.state, label: LABELS[this.state], message: this.message, active: this.active, tasks: this.tasks, workerReady: this.worker.ready, login: this.worker.login }; }
+  ledger() {
+    const file = safePath(this.root, '.runtime/ledger.jsonl');
+    if (!fs.existsSync(file)) return [];
+    return fs.readFileSync(file, 'utf8').split(/\r?\n/).filter(Boolean).map(line => {
+      try { return JSON.parse(line); } catch { return { status: 'ERROR', outcome: '台帳記録を読み取れません。' }; }
+    }).slice(-100).reverse();
+  }
   buildReview(folder, changes, contextPaths, tests) {
     const tracked = new Set(contextPaths);
     const files = changes.map(change => {
@@ -51,7 +81,7 @@ export class Engine {
       return { path: change.path, kind: tracked.has(change.path) ? '変更' : '新規', diff };
     });
     const results = Array.isArray(tests?.results) ? tests.results.map(r => ({ name: r.name, pass: Boolean(r.pass) })) : [];
-    return { files, tests: { pass: Boolean(tests?.pass), total: results.length, passed: results.filter(r => r.pass).length, failed: results.filter(r => !r.pass).length, results } };
+    return { files, tests: { pass: Boolean(tests?.pass), total: results.length, passed: results.filter(r => r.pass).length, failed: results.filter(r => !r.pass).length, results }, independentAudit: null };
   }
   update(task, state, message) { task.status = state; task.message = message; this.state = state; this.message = message; this.save(); }
   stop() { this.abort?.abort(); this.state = 'STOPPED'; this.message = '安全停止しました。新しい変更を反映しません。'; this.save(); }
@@ -180,9 +210,22 @@ export class Engine {
           task.summary = output.candidate.summary;
           task.durationMs = Date.now() - started;
 
+          task.independentAudit = independentlyAudit({
+            request: task.text,
+            candidate: output.candidate,
+            tests,
+            baseline,
+            changedPaths: task.changes,
+            allowedPaths: ['app/*.js', 'cases/*.json']
+          });
+          if (!task.independentAudit.passed) {
+            throw new Hold('独立監査で確認が必要な項目が見つかりました。人間確認まで保留します。', 'HOLD');
+          }
+
           const requiresHumanApproval = task.kind === TASK_TYPES.SELF_DEVELOPMENT_CHANGE || task.audit.source === 'GUI';
           if (requiresHumanApproval) {
             task.review = this.buildReview(folder, changes, contextPaths, tests);
+            task.review.independentAudit = task.independentAudit;
             task.pendingApproval = {
               folder,
               baseline,

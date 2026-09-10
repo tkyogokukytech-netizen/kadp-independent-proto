@@ -21,6 +21,7 @@ export function createServer(root, worker = new AntigravityWorker(root)) {
       return res.end(fs.readFileSync(safePath(root,'ui/'+file)));
     }
     if (req.method==='GET' && req.url==='/api/state') return reply(200,{...engine.view(),csrf});
+    if (req.method==='GET' && req.url==='/api/ledger') return reply(200,{entries:engine.ledger()});
     if (req.method!=='POST' || req.headers.origin !== 'http://'+expected || req.headers['x-kadp-token']!==csrf || req.headers['content-type']!=='application/json') return reply(403,{error:'画面を再読み込みしてください。'});
     try {
       let raw=''; for await(const chunk of req) { raw+=chunk; if(Buffer.byteLength(raw)>20000) throw new Hold('入力が長すぎます。'); }
